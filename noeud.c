@@ -6,7 +6,7 @@
 
 #define ITERS 150//itérations "globales" (échanges d'info)
 #define LITERS 20//itérations pour la minimisation locale
-#define RHO 1.0
+#define RHO 1.0//rho=1 pour que la variable duale réduite (u) soit égale à la variable duale (le prix)
 
 int NNODES;
 double u;
@@ -35,11 +35,12 @@ double pmaxs[]={10,	2,	2,	2,	2,	2,	16,		2,	2,	0,		0,		0,	0,		0,		-0.2};
 double pmins[]={0,	0,	0,	0,	0,	0,	-10,	0,	0,	-15,  -10,	-10,	-0.5,		-0.5,	-0.2};
 double prs[]={0,1,0.9,1.3,2,2,0,0,0,0,0,0,0,0,-0.2};
 int pfxes[]={0,1,1,1,1,1,0,0,0,0,0,0,0,0,1};
-double reserve=0.0;//0.1
+double reserve=0.0;// réserve en proportion de la plage de puissance disponible
 double reserve_step=0.0025;
 double reserve_max=0.3;
 double r;
 
+//pour s'y retrouver à la lecture des résultats :
 char* names[]={"charbon","eolienne","eolienne","eolienne","eolienne","eolienne","barrage","panneau","panneau","datacenter","logement","usine","tram 1","tram 2","hopital"};
 
 
@@ -59,6 +60,7 @@ void agent_min(vec* pis,double a,double x0,double alpha,vec* y,double xmax,doubl
 	double xavg;
 	unsigned int N=yis->len;
 	
+	//résolution du problème local de partage par ADMM
 	
 	for(int iter=0;iter<LITERS;iter++) {
 		xavg=vec_avg(pis);
@@ -73,7 +75,7 @@ void agent_min(vec* pis,double a,double x0,double alpha,vec* y,double xmax,doubl
 		u=u+xavg-z;
 	}
 	
-	vec_clamp(pis,xmin,xmax);
+	vec_clamp(pis,xmin,xmax); // on borne p_i = somme(p_ij)
 }
 
 
@@ -113,7 +115,7 @@ int main(int argc, char** argv) {
     // Finalize the MPI environment.
 	
 	if(world_rank==0) {
-		printf("ADMM rules\n");
+		printf("ADMM rules\n");// l'ADMM pèse
 	}
 	
 	fis_global=vec_new(NNODES);
@@ -211,7 +213,7 @@ int main(int argc, char** argv) {
 			vec_copyover(yis,qis);
 			vec_add(yis,uis);//y=q+u
 			
-			agent_min(pis,a,p0-pi,RHO/2,yis,pmax-pi,pmin-pi);//awiwiwi
+			agent_min(pis,a,p0-pi,RHO/2,yis,pmax-pi,pmin-pi);//calcul de p
 			
 			for(node=0;node<NNODES;node++) {
 				vec_scatter(pis,qis,node,MPI_COMM_WORLD);
