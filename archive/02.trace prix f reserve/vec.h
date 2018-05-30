@@ -59,8 +59,12 @@ void vec_free(vec* v) {
 }
 
 void vec_copyover(vec* dest, vec* src) {
-	vec_free(dest);
-	dest=vec_copy(src);
+	dest->len=src->len;
+	dest->data=realloc(dest->data,src->len*sizeof(double));
+	
+	for(int i=0;i<src->len;i++) {
+		dest->data[i]=src->data[i];
+	}
 }
 
 void vec_mult(vec* v,double a) {
