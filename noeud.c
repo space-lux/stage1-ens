@@ -94,17 +94,20 @@ void agent_min_anticip(vec* pis,double a,double x0,double alpha,vec* y,double xm
 		//agent_min(pis,a,x0,alpha,y,xmax,xmin);
 		double pi=vec_sum(pis);
 		double pe=x0-pi+lambda_e/(2*a);
-		/*if((pi+pe)>xmax) {
-			xmax=pi-(pi+pe-xmax)/2;
+		double pmin=xmin;
+		double pmax=xmax;
+		if((pi+pe)>xmax) {
+			pmax=pi-(pi+pe-xmax)/2;
 		}
 		if((pi+pe)<xmin) {
-			xmin=pi-(pi+pe-xmin)/2;
-		}*/
-		vec_clamp(pis,xmin,xmax);//projection orthogonale sur xmin<xi*+xie<xmax
+			pmin=pi-(pi+pe-xmin)/2;
+		}
+		vec_clamp(pis,pmin,pmax);//projection orthogonale sur xmin<xi*+xie<xmax
 		vec_add(pis_anticip,pis);
 	}
 	vec_copyover(pis,pis_anticip);
 	vec_mult(pis,((double)1)/((double)n_lambda_e));// moyenne
+	vec_clamp(pis,xmin,xmax);// des fois qu'on sorte des bornes...
 }
 
 
