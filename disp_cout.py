@@ -10,6 +10,7 @@ ecart_type=[]
 e_ts=[]
 dif=[]
 us=[]
+u2s=[]
 #sqdif=[]
 
 for ligne in f:
@@ -25,6 +26,7 @@ for ligne in fp:
 nnoeuds=15 #int(round(len(p)/2))
 e_t=0
 uavg=0
+uavg2=0
 i=0
 
 for r in range(len(ecart_type)):
@@ -37,11 +39,13 @@ for r in range(len(ecart_type)):
 	#sqdif.append(sq)
 	e_t=ecart_type[r]
 	uavg+=prix[r]
+	uavg2+=prix[r]**2
 	i+=1
 	if r<len(ecart_type)-1:
 		if e_t!=ecart_type[r+1]:
 			e_ts.append(e_t)
 			us.append(uavg/i)
+			u2s.append((uavg2-uavg*uavg/i)/i)
 			i=0
 			uavg=0
 	
@@ -61,6 +65,10 @@ plt.figure()"""
 
 plt.plot(e_ts,us)
 plt.title("prix=f(ecart_type)")
+plt.figure()
+
+plt.plot(e_ts,u2s)
+plt.title("variance_prix=f(ecart_type)")
 
 plt.show()
 
