@@ -40,11 +40,11 @@ double pmaxs[]={10,	2,	2,	2,	2,	2,	16,		2,	2,	0,		0,		0,	0,		0,		-0.2};
 double pmins[]={0,	0,	0,	0,	0,	0,	-10,	0,	0,	-15,  -10,	-10,	-0.5,		-0.5,	-0.2};
 double prs[]={0,1,0.9,1.3,2,2,0,0,0,0,0,0,0,0,-0.2};
 int pfxes[]={0,1,1,1,1,1,0,0,0,0,0,0,0,0,1};
-double ecart_type=0.1;// réserve en proportion de la plage de puissance disponible
-double ecart_type_step=0.1;
-double ecart_type_max=1.61;
+double reserve=0.0;// réserve en proportion de la plage de puissance disponible
+double reserve_step=0.0025;
+double reserve_max=0.3;
+double r;
 unsigned int n_lambda_e=100;
-int n_situations=50;//nombre de situations par niveau de fiabilité
 
 //pour s'y retrouver à la lecture des résultats :
 char* names[]={"charbon","eolienne","eolienne","eolienne","eolienne","eolienne","barrage","panneau","panneau","datacenter","logement","usine","tram 1","tram 2","hopital"};
@@ -169,138 +169,142 @@ int main(int argc, char** argv) {
 	a=as[world_rank];
 	b=bs[world_rank];
 	p0=p0s[world_rank];
+	pr=prs[world_rank];
 	pfxe=pfxes[world_rank];
 	
 	
-	for(ecart_type=ecart_type;ecart_type<=ecart_type_max;ecart_type+=ecart_type_step) {
-		for(int situation=0;situation<n_situations;situation++) {
-			vec_zero(pis);
-			vec_zero(uis);
-			vec_zero(yis);
-			vec_zero(qis);
-				
-			pi=0;
-			avg=0;
-			u=1.0;
-			//pr=pmin+drand()*(pmax-pmin);
-			pr=clamp(randn(p0,ecart_type),pmin,pmax);
-			
+	vec_zero(pis);
+	vec_zero(uis);
+	vec_zero(yis);
+	vec_zero(qis);
+		
+	
+	pi=0;
+	avg=0;
+	u=1.0;
+	
+	/*
+	//if(!pfxe) { // est-ce qu'on veut imposer une réserve aux agents qui subissent de toute façon ?
+		r=(pmax-pmin)*reserve;
+		pmax-=r;
+		pmin+=r;
+	//}
+	*/
 
-			//premier marché : calcul de p^*_i et p^epsilon_i anticipé
-			for(i=0;i<ITERS;i++) {
-				vec_copyover(yis,qis);
-				vec_add(yis,uis);//y=q+u
-				
-				agent_min_anticip(pis,a,p0,RHO/2,yis,pmax,pmin);//calcul de p
-				
-				for(node=0;node<NNODES;node++) {
-					vec_scatter(pis,qis,node,MPI_COMM_WORLD);
-				}//transmission de pt (dans q)
-				
-				vec_sub(qis,pis);
-				vec_mult(qis,-0.5);//q=(p-pt)/2
-				
-				vec_add(uis,qis);
-				vec_sub(uis,pis);//u:=u+q-p
-			}
-			
-			
-			/*if(world_rank==0) {
-				printf("prix : %f\npuissance : %f\n",lambda_es->data[i_le],vec_sum(pis));
-			}*/
-			
-			pi=vec_sum(pis);
-			printf("Valeur de l'élément %d (%s) : %f (%f<p<%f)\n",world_rank,(names[world_rank]),pi,pmin,pmax);
-			
-			MPI_Reduce(&pi,&avg,1,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
-			
-			
-			//calcul de f_i(p^*_i) et transmission au process 0, qui ne fera qu'enregister dans un fichier : pas indispensable au fonctionnement
-			fi=f(pi);
-			MPI_Gather(&fi,1,MPI_DOUBLE,fis_global->data,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
-			
-			
-			u=uis->data[0];
-			
-			if(world_rank==0) {
-				printf("Valeur totale : %f\n",avg);
-				printf("Variable duale : %f\n",u);
-				//enregistrement : tous les f_i(p^*_i)
-				fprintf(cout,"%f",ecart_type);
-				for(int j=0;j<NNODES;j++) {
-					fprintf(cout,";%f",fis_global->data[j]);
-				}
-			}
-			
-				
-			vec_zero(pis);
-			vec_zero(uis);
-			vec_zero(yis);
-			vec_zero(qis);
-			
-			if(world_rank==0) {
-				printf("\nSecond marché\n\n");
-			}
-			
-			//second marché : calcul de p^epsilon_i
-			pmax=pmaxs[world_rank];
-			pmin=pmins[world_rank];
-			if(pfxe) {
-				pr=pmin+drand()*(pmax-pmin);
-				pmin=pr;//si on subit, alors on subit
-				pmax=pr;
-			}
-			
-			for(i=0;i<ITERS;i++) {
-				vec_copyover(yis,qis);
-				vec_add(yis,uis);//y=q+u
-				
-				agent_min(pis,a,p0-pi,RHO/2,yis,pmax-pi,pmin-pi);//calcul de p
-				//agent_min(pis,a,p0,RHO/2,yis,pmax,pmin);//calcul de p
-				
-				for(node=0;node<NNODES;node++) {
-					vec_scatter(pis,qis,node,MPI_COMM_WORLD);
-				}//transmission de pt (dans q)
-				
-				vec_sub(qis,pis);
-				vec_mult(qis,-0.5);//q=(p-pt)/2
-				
-				vec_add(uis,qis);
-				vec_sub(uis,pis);//u:=u+q-p
-			}
-			
-			pi=vec_sum(pis)+pi;
-			//pi=vec_sum(pis);
-			printf("Valeur de l'élément %d (%s) : %f (%f<p<%f)\n",world_rank,(names[world_rank]),pi,pmin,pmax);
-			
-			MPI_Reduce(&pi,&avg,1,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
-			
-			//calcul de f_i(p^*_i+p^epsilon_i) et transmission au process 0, qui ne fera qu'enregister dans un fichier : pas indispensable au fonctionnement
-			fi=f(pi);
-			MPI_Gather(&fi,1,MPI_DOUBLE,fis_global->data,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
-			
-			if(world_rank==0) {
-				printf("Valeur totale : %f\n",avg);
-				printf("Variable duale : %f\n",uis->data[0]);
-				
-				//enregistrement fichier : reserve, u premier marché, u second marché
-				fprintf(prix,"%f;%f;%f\n",ecart_type,u,uis->data[0]);
-				
-				//enregistrement : tous les f_i(p^*_i+p^epsilon_i)
-				for(int j=0;j<NNODES;j++) {
-					fprintf(cout,";%f",fis_global->data[j]);
-				}
-				fprintf(cout,"\n");
-				
-				//récap
-				printf("\nRécap\n\n");
-				printf("écart-type (1/fiabilité) : %f\n",ecart_type);
-				printf("prix premier marché : %f\n",u);
-				printf("prix second marché : %f\n",uis->data[0]);
-				printf("(diff relative : %f)\n\n",(uis->data[0]-u)/uis->data[0]);
-			}
+	//premier marché : calcul de p^*_i et p^epsilon_i anticipé
+	for(i=0;i<ITERS;i++) {
+		vec_copyover(yis,qis);
+		vec_add(yis,uis);//y=q+u
+		
+		agent_min_anticip(pis,a,p0,RHO/2,yis,pmax,pmin);//calcul de p
+		
+		for(node=0;node<NNODES;node++) {
+			vec_scatter(pis,qis,node,MPI_COMM_WORLD);
+		}//transmission de pt (dans q)
+		
+		vec_sub(qis,pis);
+		vec_mult(qis,-0.5);//q=(p-pt)/2
+		
+		vec_add(uis,qis);
+		vec_sub(uis,pis);//u:=u+q-p
+	}
+	
+	
+	/*if(world_rank==0) {
+		printf("prix : %f\npuissance : %f\n",lambda_es->data[i_le],vec_sum(pis));
+	}*/
+	
+	pi=vec_sum(pis);
+	printf("Valeur de l'élément %d (%s) : %f (%f<p<%f)\n",world_rank,(names[world_rank]),pi,pmin,pmax);
+	
+	MPI_Reduce(&pi,&avg,1,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
+	
+	
+	//calcul de f_i(p^*_i) et transmission au process 0, qui ne fera qu'enregister dans un fichier : pas indispensable au fonctionnement
+	fi=f(pi);
+	MPI_Gather(&fi,1,MPI_DOUBLE,fis_global->data,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
+	
+	
+	u=uis->data[0];
+	
+	if(world_rank==0) {
+		printf("Valeur totale : %f\n",avg);
+		printf("Variable duale : %f\n",u);
+		//enregistrement : tous les f_i(p^*_i)
+		fprintf(cout,"%f",reserve);
+		for(int j=0;j<NNODES;j++) {
+			fprintf(cout,";%f",fis_global->data[j]);
 		}
 	}
+	
+		
+	vec_zero(pis);
+	vec_zero(uis);
+	vec_zero(yis);
+	vec_zero(qis);
+	
+	if(world_rank==0) {
+		printf("\nSecond marché\n\n");
+	}
+	
+	//second marché : calcul de p^epsilon_i
+	pmax=pmaxs[world_rank];
+	pmin=pmins[world_rank];
+	if(pfxe) {
+		pr=pmin+drand()*(pmax-pmin);
+		pmin=pr;//si on subit, alors on subit
+		pmax=pr;
+	}
+	
+	for(i=0;i<ITERS;i++) {
+		vec_copyover(yis,qis);
+		vec_add(yis,uis);//y=q+u
+		
+		agent_min(pis,a,p0-pi,RHO/2,yis,pmax-pi,pmin-pi);//calcul de p
+		//agent_min(pis,a,p0,RHO/2,yis,pmax,pmin);//calcul de p
+		
+		for(node=0;node<NNODES;node++) {
+			vec_scatter(pis,qis,node,MPI_COMM_WORLD);
+		}//transmission de pt (dans q)
+		
+		vec_sub(qis,pis);
+		vec_mult(qis,-0.5);//q=(p-pt)/2
+		
+		vec_add(uis,qis);
+		vec_sub(uis,pis);//u:=u+q-p
+	}
+	
+	pi=vec_sum(pis)+pi;
+	//pi=vec_sum(pis);
+	printf("Valeur de l'élément %d (%s) : %f (%f<p<%f)\n",world_rank,(names[world_rank]),pi,pmin,pmax);
+	
+	MPI_Reduce(&pi,&avg,1,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
+	
+	//calcul de f_i(p^*_i+p^epsilon_i) et transmission au process 0, qui ne fera qu'enregister dans un fichier : pas indispensable au fonctionnement
+	fi=f(pi);
+	MPI_Gather(&fi,1,MPI_DOUBLE,fis_global->data,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
+	
+	if(world_rank==0) {
+		printf("Valeur totale : %f\n",avg);
+		printf("Variable duale : %f\n",uis->data[0]);
+		
+		//enregistrement fichier : reserve, u premier marché, u second marché
+		fprintf(prix,"%f;%f;%f\n",reserve,u,uis->data[0]);
+		
+		//enregistrement : tous les f_i(p^*_i+p^epsilon_i)
+		for(int j=0;j<NNODES;j++) {
+			fprintf(cout,";%f",fis_global->data[j]);
+		}
+		fprintf(cout,"\n");
+		
+		//récap
+		printf("\nRécap\n\n");
+		//printf("réserve : %f\n",reserve);
+		printf("prix premier marché : %f\n",u);
+		printf("prix second marché : %f\n",uis->data[0]);
+		printf("(diff relative : %f)\n\n",(uis->data[0]-u)/uis->data[0]);
+	}
+	
 	
 	if(world_rank==0) {
 		fclose(prix);

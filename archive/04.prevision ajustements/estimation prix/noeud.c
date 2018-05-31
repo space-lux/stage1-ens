@@ -40,7 +40,7 @@ double prs[]={0,1,0.9,1.3,2,2,0,0,0,0,0,0,0,0,-0.2};
 int pfxes[]={0,1,1,1,1,1,0,0,0,0,0,0,0,0,1};
 double reserve=0.0;//0.1
 double r;
-int n_situations=10;
+int n_situations=150;
 
 char* names[]={"charbon","eolienne","eolienne","eolienne","eolienne","eolienne","barrage","panneau","panneau","datacenter","logement","usine","tram 1","tram 2","hopital"};
 
@@ -148,6 +148,7 @@ int main(int argc, char** argv) {
 		//second marché
 		
 		pr=pmin+drand()*(pmax-pmin);// un peu d'aléatoire pour avoir queleque chose de "représentatif"
+		//pr=clamp(randn(p0,1.5),pmin,pmax);
 		if(pfxe) {
 			pmin=pr;//si on subit, alors on subit
 			pmax=pr;

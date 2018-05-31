@@ -6,46 +6,61 @@ fp=open("price.csv","r")
 
 cout=[]
 prix=[]
-reserve=[]
+ecart_type=[]
+e_ts=[]
 dif=[]
-sqdif=[]
+us=[]
+#sqdif=[]
 
 for ligne in f:
     p=ligne.split(";")[1:]
     cout=cout+[[float(i) for i in p]]
-    reserve=reserve+[float(ligne.split(";")[0])]
+    ecart_type.append(float(ligne.split(";")[0]))
     
 for ligne in fp:
 	p=ligne.split(";")[1:]
-	prix.append(float(p[1])-float(p[0]))
+	prix.append(float(p[1]))
 	
 
 nnoeuds=15 #int(round(len(p)/2))
+e_t=0
+uavg=0
+i=0
 
-for r in range(len(reserve)):
+for r in range(len(ecart_type)):
 	d=0
-	sq=[]
+	#sq=[]
 	for noeud in range(nnoeuds):
 		d+=(cout[r][noeud+nnoeuds]-cout[r][noeud])
-		sq.append((cout[r][noeud+nnoeuds]-cout[r][noeud])**2)
+		#sq.append((cout[r][noeud+nnoeuds]-cout[r][noeud])**2)
 	dif.append(d)
-	sqdif.append(sq)
+	#sqdif.append(sq)
+	e_t=ecart_type[r]
+	uavg+=prix[r]
+	i+=1
+	if r<len(ecart_type)-1:
+		if e_t!=ecart_type[r+1]:
+			e_ts.append(e_t)
+			us.append(uavg/i)
+			i=0
+			uavg=0
+	
 
 #print(reserve)
 
 ##t=list(range(len(prix)))
-plt.plot(reserve,dif)
+"""plt.plot(ecart_type,dif)
 ##plt.xlabel("Itérations")
 ##plt.ylabel("u")
 plt.title("dif=f(reserve)")
-plt.figure()
+plt.figure()"""
 
-plt.plot(reserve,sqdif)
+"""plt.plot(reserve,sqdif)
 plt.title("sqdif=f(reserve)")
-plt.figure()
+plt.figure()"""
 
-plt.plot(reserve,prix)
-plt.title("diff_prix=f(reserve)")
+plt.plot(e_ts,us)
+plt.title("prix=f(ecart_type)")
 
 plt.show()
 
