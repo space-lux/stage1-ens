@@ -58,7 +58,7 @@ double clamp(double val,double mi,double ma){
 	return fmin(fmax(val,mi),ma);
 }
 
-void agent_min(vec* pis,double a,double x0,double alpha,vec* y,double xmax,double xmin) {
+void agent_min(vec* pis,double a,double x0,double alpha,vec* y,double xmax,double xmin) {//algo adapté du matlab de RLGL - smiley clin d'oeil
 	double u=0;
 	double z=0;
 	double rho=1;
@@ -86,17 +86,18 @@ void agent_min(vec* pis,double a,double x0,double alpha,vec* y,double xmax,doubl
 
 void agent_min_anticip(vec* pis,double a,double x0,double alpha,vec* y,double xmax,double xmin) {
 	
+	// calculd'une valeur moyenne de p_i pour plusieurs valeurs de 
+	
 	vec_zero(pis_anticip);
 	
-	for(unsigned int i_le=0;i_le<n_lambda_e;i_le++) {
+	for(unsigned int i_le=0;i_le<n_lambda_e;i_le++) {//pour chaque valeur de lambda
 		lambda_e=lambda_es->data[i_le];
-		agent_min(pis,a,x0-lambda_e/(2*a),alpha,y,xmax,xmin);
-		//agent_min(pis,a,x0,alpha,y,xmax,xmin);
+		agent_min(pis,a,x0-lambda_e/(2*a),alpha,y,xmax,xmin); // on peut montrer que pour notre problème, la fonction de coût anticipée correspond au polynôme centré non pas en x0 mais en x0-(lambda/2a)
 		double pi=vec_sum(pis);
-		double pe=x0-pi+lambda_e/(2*a);
+		double pe=x0-pi+lambda_e/(2*a);//p^epsilon
 		double pmin=xmin;
 		double pmax=xmax;
-		if((pi+pe)>xmax) {
+		if((pi+pe)>xmax) {//on adapte les bornes de p_i pour p^*_i
 			pmax=pi-(pi+pe-xmax)/2;
 		}
 		if((pi+pe)<xmin) {
@@ -106,7 +107,7 @@ void agent_min_anticip(vec* pis,double a,double x0,double alpha,vec* y,double xm
 		vec_add(pis_anticip,pis);
 	}
 	vec_copyover(pis,pis_anticip);
-	vec_mult(pis,((double)1)/((double)n_lambda_e));// moyenne
+	vec_mult(pis,((double)1)/((double)n_lambda_e));// on divise la somme par le nombre d'éléments -> moyenne
 	vec_clamp(pis,xmin,xmax);// des fois qu'on sorte des bornes...
 }
 
@@ -159,7 +160,7 @@ int main(int argc, char** argv) {
 	pis=vec_new(NNODES);
 	lambda_es=vec_new(n_lambda_e);
 	pis_anticip=vec_new(NNODES);
-	for(unsigned int i_le=0;i_le<n_lambda_e;i_le++) {
+	for(unsigned int i_le=0;i_le<n_lambda_e;i_le++) {// génération des valeurs de lambda : randn(moyenne,ecart_type)
 		lambda_es->data[i_le]=clamp(randn(0.125,0.02),pmin,pmax);
 	}
 	qis=vec_new(NNODES);
@@ -172,8 +173,8 @@ int main(int argc, char** argv) {
 	pfxe=pfxes[world_rank];
 	
 	
-	for(ecart_type=ecart_type;ecart_type<=ecart_type_max;ecart_type+=ecart_type_step) {
-		for(int situation=0;situation<n_situations;situation++) {
+	for(ecart_type=ecart_type;ecart_type<=ecart_type_max;ecart_type+=ecart_type_step) {//pour différentes valeurs de fiabilité
+		for(int situation=0;situation<n_situations;situation++) {//on se place dans plusieurs situations, pour avoir une certaine représentativité
 			vec_zero(pis);
 			vec_zero(uis);
 			vec_zero(yis);
@@ -183,7 +184,7 @@ int main(int argc, char** argv) {
 			avg=0;
 			u=1.0;
 			//pr=pmin+drand()*(pmax-pmin);
-			pr=clamp(randn(p0,ecart_type),pmin,pmax);
+			pr=clamp(randn(p0,ecart_type),pmin,pmax);//on génère aléatoirement la valeur de puissance subie, en fonction de la fiabilité
 			
 
 			//premier marché : calcul de p^*_i et p^epsilon_i anticipé
@@ -246,7 +247,7 @@ int main(int argc, char** argv) {
 			pmax=pmaxs[world_rank];
 			pmin=pmins[world_rank];
 			if(pfxe) {
-				pr=pmin+drand()*(pmax-pmin);
+				//pr=pmin+drand()*(pmax-pmin);
 				pmin=pr;//si on subit, alors on subit
 				pmax=pr;
 			}
@@ -297,7 +298,6 @@ int main(int argc, char** argv) {
 				printf("écart-type (1/fiabilité) : %f\n",ecart_type);
 				printf("prix premier marché : %f\n",u);
 				printf("prix second marché : %f\n",uis->data[0]);
-				printf("(diff relative : %f)\n\n",(uis->data[0]-u)/uis->data[0]);
 			}
 		}
 	}
