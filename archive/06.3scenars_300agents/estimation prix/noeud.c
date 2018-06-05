@@ -31,7 +31,7 @@ double avg;
 double lamb;
 
 
-#include "defs_300.h"
+#include "defs_175.h"
 double prs[]={0,1,0.9,1.3,2,2,0,0,0,0,0,0,0,0,-0.2};
 double reserve=0.0;//0.1
 double r;
