@@ -32,17 +32,22 @@ double avg;
 double lamb;
 double lambda_e;
 
-//#include "defs_15.h"//le problème originel
-#include "defs_300.h"//le problème de Thomas
+
+double as[]={	0.6,1,1,1,1,1,0.01,0.9,0.9,5,1,5,6,10,200};
+double bs[]={1000,10,10,10,10,10,100,11,11,20,10,8,9,9,30};
+double p0s[]={	8.5,1.9,1.9,1.9,1.9,1.9,3,		1.9,1.9,-10,-7.5,	-9,	-0.12,	-0.12,	-0.2};
+double pmaxs[]={10,	2,	2,	2,	2,	2,	16,		2,	2,	0,		0,		0,	0,		0,		-0.2};
+double pmins[]={0,	0,	0,	0,	0,	0,	-10,	0,	0,	-15,  -10,	-10,	-0.5,		-0.5,	-0.2};
 double prs[]={0,1,0.9,1.3,2,2,0,0,0,0,0,0,0,0,-0.2};
-double ecart_type=0.1;// réserve en proportion de la plage de puissance disponible
+int pfxes[]={0,1,1,1,1,1,0,0,0,0,0,0,0,0,1};
+double ecart_type=0.1;// écart-type (inverse de la fiabilité) subi par les agents pas fiables
 double ecart_type_step=0.1;
-double ecart_type_max=0.61;
-unsigned int n_lambda_e=10;
-int n_situations=5;//nombre de situations par niveau de fiabilité
+double ecart_type_max=1.61;
+unsigned int n_lambda_e=100;
+int n_situations=50;//nombre de situations par niveau de fiabilité
 
 //pour s'y retrouver à la lecture des résultats :
-//char* names[]={"charbon","eolienne","eolienne","eolienne","eolienne","eolienne","barrage","panneau","panneau","datacenter","logement","usine","tram 1","tram 2","hopital"};
+char* names[]={"charbon","eolienne","eolienne","eolienne","eolienne","eolienne","barrage","panneau","panneau","datacenter","logement","usine","tram 1","tram 2","hopital"};
 
 
 double f(double p) {
@@ -206,7 +211,7 @@ int main(int argc, char** argv) {
 			}*/
 			
 			pi=vec_sum(pis);
-			printf("Valeur de l'élément %d : %f (%f<p<%f)\n",world_rank,pi,pmin,pmax);
+			printf("Valeur de l'élément %d (%s) : %f (%f<p<%f)\n",world_rank,(names[world_rank]),pi,pmin,pmax);
 			
 			MPI_Reduce(&pi,&avg,1,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
 			
@@ -267,7 +272,7 @@ int main(int argc, char** argv) {
 			
 			pi=vec_sum(pis)+pi;
 			//pi=vec_sum(pis);
-			printf("Valeur de l'élément %d : %f (%f<p<%f)\n",world_rank,pi,pmin,pmax);
+			printf("Valeur de l'élément %d (%s) : %f (%f<p<%f)\n",world_rank,(names[world_rank]),pi,pmin,pmax);
 			
 			MPI_Reduce(&pi,&avg,1,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
 			
