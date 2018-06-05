@@ -35,7 +35,7 @@ double lamb;
 double prs[]={0,1,0.9,1.3,2,2,0,0,0,0,0,0,0,0,-0.2};
 double reserve=0.0;//0.1
 double r;
-int n_situations=10;
+int n_situations=150;
 
 //char* names[]={"charbon","eolienne","eolienne","eolienne","eolienne","eolienne","barrage","panneau","panneau","datacenter","logement","usine","tram 1","tram 2","hopital"};
 
