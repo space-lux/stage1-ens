@@ -31,15 +31,19 @@ vec* fis_global=NULL;
 double avg;
 double lamb;
 double lambda_e;
+double reserve=0.0;// réserve en proportion de la plage de puissance disponible
+double reserve_step=0.0025;
+double reserve_max=0.3;
+double r;
 
 //#include "defs_15.h"//le problème originel
-#include "defs_300.h"//le problème de Thomas
+#include "defs_175.h"//le problème de Thomas
 double prs[]={0,1,0.9,1.3,2,2,0,0,0,0,0,0,0,0,-0.2};
-double ecart_type=0.1;// réserve en proportion de la plage de puissance disponible
-double ecart_type_step=0.1;
-double ecart_type_max=0.61;
-unsigned int n_lambda_e=10;
-int n_situations=5;//nombre de situations par niveau de fiabilité
+double ecart_type=0.1;//valeur d'écart-type : inverse de la fiabilité des agents qui subissent
+double ecart_type_step=0.2;
+double ecart_type_max=1.71;
+unsigned int n_lambda_e=50;
+int n_situations=200;//nombre de situations par niveau de fiabilité
 
 //pour s'y retrouver à la lecture des résultats :
 //char* names[]={"charbon","eolienne","eolienne","eolienne","eolienne","eolienne","barrage","panneau","panneau","datacenter","logement","usine","tram 1","tram 2","hopital"};
@@ -81,7 +85,7 @@ void agent_min(vec* pis,double a,double x0,double alpha,vec* y,double xmax,doubl
 
 void agent_min_anticip(vec* pis,double a,double x0,double alpha,vec* y,double xmax,double xmin) {
 	
-	// calculd'une valeur moyenne de p_i pour plusieurs valeurs de 
+	// calcul d'une valeur moyenne de p_i pour plusieurs valeurs de 
 	
 	vec_zero(pis_anticip);
 	
@@ -127,11 +131,15 @@ int main(int argc, char** argv) {
     MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 	srand(time(NULL)+world_rank);
     
-	FILE *prix;
-	FILE *cout;
+    FILE *f_2e_marche;
+    FILE *f_simple;
+	FILE *f_reserve;
+	FILE *f_prevision;
 	if(world_rank==0) {
-		prix=fopen("price.csv","w");
-		cout=fopen("cout.csv","w");
+		f_2e_marche=fopen("2e_marche.csv","w");
+		f_simple=fopen("simple.csv","w");
+		f_reserve=fopen("reserve.csv","w");
+		f_prevision=fopen("prevision.csv","w");
 	}
 
     // Get the name of the processor
@@ -156,7 +164,7 @@ int main(int argc, char** argv) {
 	lambda_es=vec_new(n_lambda_e);
 	pis_anticip=vec_new(NNODES);
 	for(unsigned int i_le=0;i_le<n_lambda_e;i_le++) {// génération des valeurs de lambda : randn(moyenne,ecart_type)
-		lambda_es->data[i_le]=clamp(randn(0.125,0.02),pmin,pmax);
+		lambda_es->data[i_le]=clamp(randn(-9.9,5.7),pmin,pmax);
 	}
 	qis=vec_new(NNODES);
 	yis=vec_new(NNODES);
@@ -168,79 +176,80 @@ int main(int argc, char** argv) {
 	pfxe=pfxes[world_rank];
 	
 	
+	vec_zero(pis);
+	vec_zero(uis);
+	vec_zero(yis);
+	vec_zero(qis);
+		
+	pi=0;
+	avg=0;
+	u=1.0;
+	
+
+	//premier marché : calcul de p^*_i et p^epsilon_i anticipé
+	for(i=0;i<ITERS;i++) {
+		vec_copyover(yis,qis);
+		vec_add(yis,uis);//y=q+u
+		
+		agent_min_anticip(pis,a,p0,RHO/2,yis,pmax,pmin);//calcul de p
+		
+		for(node=0;node<NNODES;node++) {
+			vec_scatter(pis,qis,node,MPI_COMM_WORLD);
+		}//transmission de pt (dans q)
+		
+		vec_sub(qis,pis);
+		vec_mult(qis,-0.5);//q=(p-pt)/2
+		
+		vec_add(uis,qis);
+		vec_sub(uis,pis);//u:=u+q-p
+	}
+	
+	
+	/*if(world_rank==0) {
+		printf("prix : %f\npuissance : %f\n",lambda_es->data[i_le],vec_sum(pis));
+	}*/
+	
+	pi=vec_sum(pis);
+	printf("Valeur de l'élément %d : %f (%f<p<%f)\n",world_rank,pi,pmin,pmax);
+	
+	MPI_Reduce(&pi,&avg,1,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
+	
+	
+	//calcul de f_i(p^*_i) et transmission au process 0, qui ne fera qu'enregister dans un fichier : pas indispensable au fonctionnement
+	fi=f(pi);
+	MPI_Gather(&fi,1,MPI_DOUBLE,fis_global->data,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
+	
+	
+	u=uis->data[0];
+	
+	if(world_rank==0) {
+		printf("Valeur totale : %f\n",avg);
+		printf("Variable duale : %f\n",u);
+		//enregistrement : tous les f_i(p^*_i)
+		fprintf(f_reserve,"%f",ecart_type);
+		for(int j=0;j<NNODES;j++) {
+			fprintf(f_reserve,";%f",fis_global->data[j]);
+		}
+	}
+	
+	if(world_rank==0) {
+		printf("\nSecond marché\n\n");
+	}
+	
 	for(ecart_type=ecart_type;ecart_type<=ecart_type_max;ecart_type+=ecart_type_step) {//pour différentes valeurs de fiabilité
 		for(int situation=0;situation<n_situations;situation++) {//on se place dans plusieurs situations, pour avoir une certaine représentativité
-			vec_zero(pis);
-			vec_zero(uis);
-			vec_zero(yis);
-			vec_zero(qis);
-				
-			pi=0;
-			avg=0;
-			u=1.0;
-			//pr=pmin+drand()*(pmax-pmin);
-			pr=clamp(randn(p0,ecart_type),pmin,pmax);//on génère aléatoirement la valeur de puissance subie, en fonction de la fiabilité
-			
-
-			//premier marché : calcul de p^*_i et p^epsilon_i anticipé
-			for(i=0;i<ITERS;i++) {
-				vec_copyover(yis,qis);
-				vec_add(yis,uis);//y=q+u
-				
-				agent_min_anticip(pis,a,p0,RHO/2,yis,pmax,pmin);//calcul de p
-				
-				for(node=0;node<NNODES;node++) {
-					vec_scatter(pis,qis,node,MPI_COMM_WORLD);
-				}//transmission de pt (dans q)
-				
-				vec_sub(qis,pis);
-				vec_mult(qis,-0.5);//q=(p-pt)/2
-				
-				vec_add(uis,qis);
-				vec_sub(uis,pis);//u:=u+q-p
-			}
-			
-			
-			/*if(world_rank==0) {
-				printf("prix : %f\npuissance : %f\n",lambda_es->data[i_le],vec_sum(pis));
-			}*/
-			
-			pi=vec_sum(pis);
-			printf("Valeur de l'élément %d : %f (%f<p<%f)\n",world_rank,pi,pmin,pmax);
-			
-			MPI_Reduce(&pi,&avg,1,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
-			
-			
-			//calcul de f_i(p^*_i) et transmission au process 0, qui ne fera qu'enregister dans un fichier : pas indispensable au fonctionnement
-			fi=f(pi);
-			MPI_Gather(&fi,1,MPI_DOUBLE,fis_global->data,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
-			
-			
-			u=uis->data[0];
-			
-			if(world_rank==0) {
-				printf("Valeur totale : %f\n",avg);
-				printf("Variable duale : %f\n",u);
-				//enregistrement : tous les f_i(p^*_i)
-				fprintf(cout,"%f",ecart_type);
-				for(int j=0;j<NNODES;j++) {
-					fprintf(cout,";%f",fis_global->data[j]);
-				}
-			}
-			
 				
 			vec_zero(pis);
 			vec_zero(uis);
 			vec_zero(yis);
 			vec_zero(qis);
 			
-			if(world_rank==0) {
-				printf("\nSecond marché\n\n");
-			}
 			
 			//second marché : calcul de p^epsilon_i
 			pmax=pmaxs[world_rank];
 			pmin=pmins[world_rank];
+			//pr=pmin+drand()*(pmax-pmin);
+			pr=clamp(randn(p0,ecart_type),pmin,pmax);//on génère aléatoirement la valeur de puissance subie, en fonction de la fiabilité
 			if(pfxe) {
 				//pr=pmin+drand()*(pmax-pmin);
 				pmin=pr;//si on subit, alors on subit
@@ -251,7 +260,7 @@ int main(int argc, char** argv) {
 				vec_copyover(yis,qis);
 				vec_add(yis,uis);//y=q+u
 				
-				agent_min(pis,a,p0-pi,RHO/2,yis,pmax-pi,pmin-pi);//calcul de p
+				agent_min(pis,a,p0,RHO/2,yis,pmax,pmin);//calcul de p
 				//agent_min(pis,a,p0,RHO/2,yis,pmax,pmin);//calcul de p
 				
 				for(node=0;node<NNODES;node++) {
@@ -265,8 +274,8 @@ int main(int argc, char** argv) {
 				vec_sub(uis,pis);//u:=u+q-p
 			}
 			
-			pi=vec_sum(pis)+pi;
-			//pi=vec_sum(pis);
+			//pi=vec_sum(pis)+pi;
+			pi=vec_sum(pis);
 			printf("Valeur de l'élément %d : %f (%f<p<%f)\n",world_rank,pi,pmin,pmax);
 			
 			MPI_Reduce(&pi,&avg,1,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
@@ -280,13 +289,13 @@ int main(int argc, char** argv) {
 				printf("Variable duale : %f\n",uis->data[0]);
 				
 				//enregistrement fichier : reserve, u premier marché, u second marché
-				fprintf(prix,"%f;%f;%f\n",ecart_type,u,uis->data[0]);
+				fprintf(f_reserve,"%f;%f;%f\n",ecart_type,u,uis->data[0]);
 				
 				//enregistrement : tous les f_i(p^*_i+p^epsilon_i)
 				for(int j=0;j<NNODES;j++) {
-					fprintf(cout,";%f",fis_global->data[j]);
+					fprintf(f_reserve,";%f",fis_global->data[j]);
 				}
-				fprintf(cout,"\n");
+				fprintf(f_reserve,"\n");
 				
 				//récap
 				printf("\nRécap\n\n");
@@ -298,8 +307,10 @@ int main(int argc, char** argv) {
 	}
 	
 	if(world_rank==0) {
-		fclose(prix);
-		fclose(cout);
+		fclose(f_2e_marche);
+		fclose(f_reserve);
+		fclose(f_prevision);
+		fclose(f_simple);
 	}
 	
     MPI_Finalize();
