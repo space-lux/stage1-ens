@@ -102,7 +102,7 @@ void agent_min_anticip(vec* pis,double a,double x0,double alpha,vec* y,double xm
 		if((pi+pe)<xmin) {
 			pmin=pi-(pi+pe-xmin)/2;
 		}
-		vec_clamp(pis,pmin,pmax);//projection orthogonale sur xmin<xi*+xie<xmax
+		//vec_clamp(pis,pmin,pmax);//projection orthogonale sur xmin<xi*+xie<xmax
 		vec_add(pis_anticip,pis);
 	}
 	vec_copyover(pis,pis_anticip);
