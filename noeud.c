@@ -32,7 +32,7 @@ double avg;
 double lamb;
 double lambda_e;
 double reserve=0.0;// réserve en proportion de la plage de puissance disponible
-double reserve_step=0.0025;
+double reserve_step=0.005;
 double reserve_max=0.3;
 double r;
 
@@ -42,8 +42,8 @@ double prs[]={0,1,0.9,1.3,2,2,0,0,0,0,0,0,0,0,-0.2};
 double ecart_type=0.1;//valeur d'écart-type : inverse de la fiabilité des agents qui subissent
 double ecart_type_step=0.2;
 double ecart_type_max=1.71;
-unsigned int n_lambda_e=50;
-int n_situations=200;//nombre de situations par niveau de fiabilité
+unsigned int n_lambda_e=50;//nombre d'échantillons de prix générés
+int n_situations=100;//nombre de situations par niveau de fiabilité
 
 //pour s'y retrouver à la lecture des résultats :
 //char* names[]={"charbon","eolienne","eolienne","eolienne","eolienne","eolienne","barrage","panneau","panneau","datacenter","logement","usine","tram 1","tram 2","hopital"};
@@ -89,18 +89,23 @@ void agent_min_anticip(vec* pis,double a,double x0,double alpha,vec* y,double xm
 	
 	vec_zero(pis_anticip);
 	
+	double pmin;
+	double pmax;
+	
 	for(unsigned int i_le=0;i_le<n_lambda_e;i_le++) {//pour chaque valeur de lambda
 		lambda_e=lambda_es->data[i_le];
 		agent_min(pis,a,x0-lambda_e/(2*a),alpha,y,xmax,xmin); // on peut montrer que pour notre problème, la fonction de coût anticipée correspond au polynôme centré non pas en x0 mais en x0-(lambda/2a)
 		double pi=vec_sum(pis);
 		double pe=x0-pi+lambda_e/(2*a);//p^epsilon
-		double pmin=xmin;
-		double pmax=xmax;
-		if((pi+pe)>xmax) {//on adapte les bornes de p_i pour p^*_i
-			pmax=pi-(pi+pe-xmax)/2;
+		pmin=xmin;
+		pmax=xmax;
+		if((pi+pe)>xmax) {//La projection orthogonale ayant l'air d'être source d'opérations interdites, on se contente de borner bêtement pi+pe
+			//pmax=pi-(pi+pe-xmax)/2;
+			vec_mult(pis,xmax/(pi+pe));
 		}
 		if((pi+pe)<xmin) {
-			pmin=pi-(pi+pe-xmin)/2;
+			//pmin=pi-(pi+pe-xmin)/2;
+			vec_mult(pis,xmin/(pi+pe));
 		}
 		//vec_clamp(pis,pmin,pmax);//projection orthogonale sur xmin<xi*+xie<xmax
 		vec_add(pis_anticip,pis);
@@ -176,6 +181,9 @@ int main(int argc, char** argv) {
 	pfxe=pfxes[world_rank];
 	
 	
+	
+	//premier marché naïf
+	
 	vec_zero(pis);
 	vec_zero(uis);
 	vec_zero(yis);
@@ -185,6 +193,143 @@ int main(int argc, char** argv) {
 	avg=0;
 	u=1.0;
 	
+	if(world_rank==0) {
+		printf("\nPremier marché naïf\n\n");
+	}
+
+	//premier marché : calcul de p^*_i
+	for(i=0;i<ITERS;i++) {
+		vec_copyover(yis,qis);
+		vec_add(yis,uis);//y=q+u
+		
+		agent_min(pis,a,p0,RHO/2,yis,pmax,pmin);//calcul de p
+		
+		for(node=0;node<NNODES;node++) {
+			vec_scatter(pis,qis,node,MPI_COMM_WORLD);
+		}//transmission de pt (dans q)
+		
+		vec_sub(qis,pis);
+		vec_mult(qis,-0.5);//q=(p-pt)/2
+		
+		vec_add(uis,qis);
+		vec_sub(uis,pis);//u:=u+q-p
+	}
+	
+	
+	/*if(world_rank==0) {
+		printf("prix : %f\npuissance : %f\n",lambda_es->data[i_le],vec_sum(pis));
+	}*/
+	
+	pi=vec_sum(pis);
+	printf("Valeur de l'élément %d : %f (%f<p<%f)\n",world_rank,pi,pmin,pmax);
+	
+	MPI_Reduce(&pi,&avg,1,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
+	
+	
+	//calcul de f_i(p^*_i) et transmission au process 0, qui ne fera qu'enregister dans un fichier : pas indispensable au fonctionnement
+	fi=f(pi);
+	MPI_Gather(&fi,1,MPI_DOUBLE,fis_global->data,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
+	
+	
+	u=uis->data[0];
+	
+	if(world_rank==0) {
+		printf("Valeur totale : %f\n",avg);
+		printf("Variable duale : %f\n",u);
+		//enregistrement : tous les f_i(p^*_i) et u*
+		fprintf(f_simple,"%f",uis->data[0]);
+		for(int j=0;j<NNODES;j++) {
+			fprintf(f_simple,";%f",fis_global->data[j]);
+		}
+	}
+	
+	
+	
+	//premier marché avec réserve
+	
+		for(reserve=0;reserve<reserve_max;reserve+=reserve_step) {
+		vec_zero(pis);
+		vec_zero(uis);
+		vec_zero(yis);
+		vec_zero(qis);
+			
+		a=as[world_rank];
+		b=bs[world_rank];
+		p0=p0s[world_rank];
+		pmax=pmaxs[world_rank];
+		pmin=pmins[world_rank];
+		
+		pi=0;
+		pr=prs[world_rank];
+		pfxe=pfxes[world_rank];
+		avg=0;
+		u=1.0;
+		
+		
+		//if(!pfxe) { // est-ce qu'on veut imposer une réserve aux agents qui subissent de toute façon ?
+			r=(pmax-pmin)*reserve;
+			pmax-=r;
+			pmin+=r;
+		//}
+		
+		//premier marché
+		for(i=0;i<ITERS;i++) {
+			vec_copyover(yis,qis);
+			vec_add(yis,uis);//y=q+u
+			
+			agent_min(pis,a,p0,RHO/2,yis,pmax,pmin);//awiwiwi
+			
+			for(node=0;node<NNODES;node++) {
+				vec_scatter(pis,qis,node,MPI_COMM_WORLD);
+			}//transmission de pt (dans q)
+			
+			vec_sub(qis,pis);
+			vec_mult(qis,-0.5);//q=(p-pt)/2
+			
+			vec_add(uis,qis);
+			vec_sub(uis,pis);//u:=u+q-p
+		}
+		
+		pi=vec_sum(pis);
+		printf("Valeur de l'élément %d : %f (%f<p<%f)\n",world_rank,pi,pmin,pmax);
+		
+		MPI_Reduce(&pi,&avg,1,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
+		
+		
+		fi=f(pi);
+		MPI_Gather(&fi,1,MPI_DOUBLE,fis_global->data,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
+		
+		
+		u=uis->data[0];
+		
+		if(world_rank==0) {
+			printf("Valeur totale : %f\n",avg);
+			printf("Variable duale : %f\n",u);
+			
+			fprintf(f_reserve,"%f;%f",reserve,u);// enregistrement de reserve, u, et des f_i(p^*_i)
+			for(int j=0;j<NNODES;j++) {
+				fprintf(f_reserve,";%f",fis_global->data[j]);
+			}
+			fprintf(f_reserve,"\n");
+		}
+	}
+	
+	
+	
+	//premier marché avec prévision
+	
+	vec_zero(pis);
+	vec_zero(uis);
+	vec_zero(yis);
+	vec_zero(qis);
+		
+	pi=0;
+	avg=0;
+	u=1.0;
+	
+	if(world_rank==0) {
+		printf("\nPremier marché prévisionnel\n\n");
+	}
 
 	//premier marché : calcul de p^*_i et p^epsilon_i anticipé
 	for(i=0;i<ITERS;i++) {
@@ -225,12 +370,15 @@ int main(int argc, char** argv) {
 	if(world_rank==0) {
 		printf("Valeur totale : %f\n",avg);
 		printf("Variable duale : %f\n",u);
-		//enregistrement : tous les f_i(p^*_i)
-		fprintf(f_reserve,"%f",ecart_type);
+		//enregistrement : tous les f_i(p^*_i) et u*
+		fprintf(f_prevision,"%f",uis->data[0]);
 		for(int j=0;j<NNODES;j++) {
-			fprintf(f_reserve,";%f",fis_global->data[j]);
+			fprintf(f_prevision,";%f",fis_global->data[j]);
 		}
 	}
+	
+	
+	//second marché (toujours le même)
 	
 	if(world_rank==0) {
 		printf("\nSecond marché\n\n");
@@ -288,20 +436,14 @@ int main(int argc, char** argv) {
 				printf("Valeur totale : %f\n",avg);
 				printf("Variable duale : %f\n",uis->data[0]);
 				
-				//enregistrement fichier : reserve, u premier marché, u second marché
-				fprintf(f_reserve,"%f;%f;%f\n",ecart_type,u,uis->data[0]);
+				//enregistrement fichier : reserve, u second marché
+				fprintf(f_2e_marche,"%f;%f\n",ecart_type,uis->data[0]);
 				
 				//enregistrement : tous les f_i(p^*_i+p^epsilon_i)
 				for(int j=0;j<NNODES;j++) {
-					fprintf(f_reserve,";%f",fis_global->data[j]);
+					fprintf(f_2e_marche,";%f",fis_global->data[j]);
 				}
-				fprintf(f_reserve,"\n");
-				
-				//récap
-				printf("\nRécap\n\n");
-				printf("écart-type (1/fiabilité) : %f\n",ecart_type);
-				printf("prix premier marché : %f\n",u);
-				printf("prix second marché : %f\n",uis->data[0]);
+				fprintf(f_2e_marche,"\n");
 			}
 		}
 	}
