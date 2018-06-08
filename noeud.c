@@ -32,7 +32,7 @@ double avg;
 double lamb;
 double lambda_e;
 double reserve=0.0;// réserve en proportion de la plage de puissance disponible
-double reserve_step=0.005;
+double reserve_step=0.002;
 double reserve_max=0.3;
 double r;
 
@@ -40,10 +40,10 @@ double r;
 #include "defs_175.h"//le problème de Thomas
 double prs[]={0,1,0.9,1.3,2,2,0,0,0,0,0,0,0,0,-0.2};
 double ecart_type=0.1;//valeur d'écart-type : inverse de la fiabilité des agents qui subissent
-double ecart_type_step=0.2;
+double ecart_type_step=0.1;
 double ecart_type_max=1.71;
-unsigned int n_lambda_e=100;//nombre d'échantillons de prix générés
-int n_situations=100;//nombre de situations par niveau de fiabilité
+unsigned int n_lambda_e=200;//nombre d'échantillons de prix générés
+int n_situations=200;//nombre de situations par niveau de fiabilité
 
 //pour s'y retrouver à la lecture des résultats :
 //char* names[]={"charbon","eolienne","eolienne","eolienne","eolienne","eolienne","barrage","panneau","panneau","datacenter","logement","usine","tram 1","tram 2","hopital"};
