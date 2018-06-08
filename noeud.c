@@ -42,7 +42,7 @@ double prs[]={0,1,0.9,1.3,2,2,0,0,0,0,0,0,0,0,-0.2};
 double ecart_type=0.1;//valeur d'écart-type : inverse de la fiabilité des agents qui subissent
 double ecart_type_step=0.2;
 double ecart_type_max=1.71;
-unsigned int n_lambda_e=50;//nombre d'échantillons de prix générés
+unsigned int n_lambda_e=100;//nombre d'échantillons de prix générés
 int n_situations=100;//nombre de situations par niveau de fiabilité
 
 //pour s'y retrouver à la lecture des résultats :
@@ -437,7 +437,7 @@ int main(int argc, char** argv) {
 				printf("Variable duale : %f\n",uis->data[0]);
 				
 				//enregistrement fichier : reserve, u second marché
-				fprintf(f_2e_marche,"%f;%f\n",ecart_type,uis->data[0]);
+				fprintf(f_2e_marche,"%f;%f",ecart_type,uis->data[0]);
 				
 				//enregistrement : tous les f_i(p^*_i+p^epsilon_i)
 				for(int j=0;j<NNODES;j++) {
