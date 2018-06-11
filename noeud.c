@@ -1,8 +1,8 @@
-#include <mpi.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
 #include <time.h>
+#include <pthread.h>
 #include "vec.h"
 #include "random.h"
 
@@ -10,7 +10,7 @@
 #define LITERS 20//itérations pour la minimisation locale
 #define RHO 1.0//rho=1 pour que la variable duale réduite (u) soit égale à la variable duale (le prix)
 
-int NNODES;
+int NNODES=175;
 double u;
 double a;
 double b;
@@ -36,6 +36,8 @@ double reserve_step=0.002;
 double reserve_max=0.3;
 double r;
 
+pthread_barrier_t barriere;
+
 //#include "defs_15.h"//le problème originel
 #include "defs_175.h"//le problème de Thomas
 double prs[]={0,1,0.9,1.3,2,2,0,0,0,0,0,0,0,0,-0.2};
@@ -44,6 +46,11 @@ double ecart_type_step=0.1;
 double ecart_type_max=1.71;
 unsigned int n_lambda_e=200;//nombre d'échantillons de prix générés
 int n_situations=200;//nombre de situations par niveau de fiabilité
+    
+FILE *f_2e_marche;
+FILE *f_simple;
+FILE *f_reserve;
+FILE *f_prevision;
 
 //pour s'y retrouver à la lecture des résultats :
 //char* names[]={"charbon","eolienne","eolienne","eolienne","eolienne","eolienne","barrage","panneau","panneau","datacenter","logement","usine","tram 1","tram 2","hopital"};
@@ -115,31 +122,14 @@ void agent_min_anticip(vec* pis,double a,double x0,double alpha,vec* y,double xm
 	vec_clamp(pis,xmin,xmax);// des fois qu'on sorte des bornes...
 }
 
-
-
-int main(int argc, char** argv) {
-    // Initialize the MPI environment
-    MPI_Init(NULL, NULL);
-
-	
-    // Get the number of processes
-    int world_size;
-    int node;
-    int i;
-    MPI_Comm_size(MPI_COMM_WORLD, &world_size);
-
-	NNODES=world_size;//étape franchement inutile, vestige d'un ancien programme, mais l'enlever obligerait à changer pas mal de notations
+void travail_noeud(int world_rank,vec *pis, vec *pis_anticip, vec *qis, vec *fis_global, vec *yis, vec *uis, vec *lambda_es) {
+	double pmax;
+	double pmin;
+	double p0;
+	double pr;
+	int pfxe;
 	
 	
-    // Get the rank of the process
-    int world_rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
-	srand(time(NULL)+world_rank);
-    
-    FILE *f_2e_marche;
-    FILE *f_simple;
-	FILE *f_reserve;
-	FILE *f_prevision;
 	if(world_rank==0) {
 		f_2e_marche=fopen("2e_marche.csv","w");
 		f_simple=fopen("simple.csv","w");
@@ -147,10 +137,8 @@ int main(int argc, char** argv) {
 		f_prevision=fopen("prevision.csv","w");
 	}
 
-    // Get the name of the processor
-    char processor_name[MPI_MAX_PROCESSOR_NAME];
-    int name_len;
-    MPI_Get_processor_name(processor_name, &name_len);
+    int node;
+    int i;
 
     // Print off a hello world message
     //printf("Bongeourre depuis %s, numero %d sur %d processus\n",processor_name, world_rank, world_size);
@@ -247,7 +235,7 @@ int main(int argc, char** argv) {
 	
 	//premier marché avec réserve
 	
-		for(reserve=0;reserve<reserve_max;reserve+=reserve_step) {
+	for(reserve=0;reserve<reserve_max;reserve+=reserve_step) {
 		vec_zero(pis);
 		vec_zero(uis);
 		vec_zero(yis);
@@ -260,7 +248,6 @@ int main(int argc, char** argv) {
 		pmin=pmins[world_rank];
 		
 		pi=0;
-		pr=prs[world_rank];
 		pfxe=pfxes[world_rank];
 		avg=0;
 		u=1.0;
@@ -453,6 +440,34 @@ int main(int argc, char** argv) {
 		fclose(f_reserve);
 		fclose(f_prevision);
 		fclose(f_simple);
+	}
+}
+
+void *thread_noeud(void *arg) {
+	int n=(int)arg;
+	
+	travail_noeud(n,&(pis[n]),&(pis_anticip[n]),&(qis[n]),&(fis_global[n]),&(yis[n]),&(uis[n]),&(lambda_es[n]));
+	
+	pthread_exit(NULL);
+}
+
+int main(int argc, char** argv) {
+
+	pthread_t *tid;
+    int node;
+	
+	pthread_barrier_init(&barriere,NULL,NNODES);
+	
+	srand(time(NULL));
+	
+	tid=calloc(sizeof(pthread_t),NNODES);
+	
+	for(node=0;node<NNODES;node++) {
+		pthread_create(&tid[node],NULL,thread_noeud,(void *)node);
+	}
+	
+	for(node=0;node<NNODES;node++) {
+		pthread_join(tid[node],NULL);
 	}
 	
     MPI_Finalize();

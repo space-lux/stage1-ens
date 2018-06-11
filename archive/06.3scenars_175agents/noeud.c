@@ -169,7 +169,7 @@ int main(int argc, char** argv) {
 	lambda_es=vec_new(n_lambda_e);
 	pis_anticip=vec_new(NNODES);
 	for(unsigned int i_le=0;i_le<n_lambda_e;i_le++) {// génération des valeurs de lambda : randn(moyenne,ecart_type)
-		lambda_es->data[i_le]=clamp(randn(-9.9,5.7),pmin,pmax);
+		lambda_es->data[i_le]=randn(-9.9,5.7);
 	}
 	qis=vec_new(NNODES);
 	yis=vec_new(NNODES);
@@ -260,7 +260,6 @@ int main(int argc, char** argv) {
 		pmin=pmins[world_rank];
 		
 		pi=0;
-		pr=prs[world_rank];
 		pfxe=pfxes[world_rank];
 		avg=0;
 		u=1.0;
