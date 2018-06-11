@@ -24,11 +24,6 @@ vec* fis_global=NULL;
 double pi=0.0;
 double avg;
 double lamb;
-double lambda_e;
-double reserve=0.0;// réserve en proportion de la plage de puissance disponible
-double reserve_step=0.002;
-double reserve_max=0.3;
-double r;
 vec** pis_g=NULL;
 
 pthread_barrier_t barriere;
@@ -37,9 +32,6 @@ pthread_mutex_t mutex=PTHREAD_MUTEX_INITIALIZER;
 //#include "defs_15.h"//le problème originel
 #include "defs_175.h"//le problème de Thomas
 double prs[]={0,1,0.9,1.3,2,2,0,0,0,0,0,0,0,0,-0.2};
-double ecart_type=0.1;//valeur d'écart-type : inverse de la fiabilité des agents qui subissent
-double ecart_type_step=0.1;
-double ecart_type_max=1.71;
 unsigned int n_lambda_e=200;//nombre d'échantillons de prix générés
 int n_situations=200;//nombre de situations par niveau de fiabilité
     
@@ -88,6 +80,7 @@ void agent_min(vec* pis,double a,double x0,double alpha,vec* yis,double xmax,dou
 
 void agent_min_anticip(vec* pis,double a,double x0,double alpha,vec* y,double xmax,double xmin,vec* pis_anticip,vec *lambda_es) {
 	
+	double lambda_e;
 	// calcul d'une valeur moyenne de p_i pour plusieurs valeurs de lambda
 	
 	vec_zero(pis_anticip);
@@ -119,6 +112,13 @@ void agent_min_anticip(vec* pis,double a,double x0,double alpha,vec* y,double xm
 }
 
 void travail_noeud(int world_rank) {
+	double ecart_type=0.1;//valeur d'écart-type : inverse de la fiabilité des agents qui subissent
+	double ecart_type_step=0.1;
+	double ecart_type_max=1.71;
+	double reserve=0.0;// réserve en proportion de la plage de puissance disponible
+	double reserve_step=0.002;
+	double reserve_max=0.3;
+	double r;
 	double pmax;
 	double pmin;
 	double p0;
