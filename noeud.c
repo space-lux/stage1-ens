@@ -6,8 +6,8 @@
 #include "vec.h"
 #include "random.h"
 
-#define ITERS 150//itérations "globales" (échanges d'info)
-#define LITERS 20//itérations pour la minimisation locale
+#define ITERS 200//itérations "globales" (échanges d'info)
+#define LITERS 30//itérations pour la minimisation locale
 #define RHO 1.0//rho=1 pour que la variable duale réduite (u) soit égale à la variable duale (le prix)
 
 int NNODES=175;
@@ -20,14 +20,8 @@ double pmin;
 double pr;
 double fi;
 int pfxe;
-double pi=0.0;
-vec* pis=NULL;
-vec* pis_anticip=NULL;
-vec* qis=NULL;
-vec* yis=NULL;
-vec* uis=NULL;
-vec* lambda_es=NULL;
 vec* fis_global=NULL;
+double pi=0.0;
 double avg;
 double lamb;
 double lambda_e;
@@ -35,8 +29,10 @@ double reserve=0.0;// réserve en proportion de la plage de puissance disponible
 double reserve_step=0.002;
 double reserve_max=0.3;
 double r;
+vec** pis_g=NULL;
 
 pthread_barrier_t barriere;
+pthread_mutex_t mutex=PTHREAD_MUTEX_INITIALIZER;
 
 //#include "defs_15.h"//le problème originel
 #include "defs_175.h"//le problème de Thomas
@@ -56,21 +52,21 @@ FILE *f_prevision;
 //char* names[]={"charbon","eolienne","eolienne","eolienne","eolienne","eolienne","barrage","panneau","panneau","datacenter","logement","usine","tram 1","tram 2","hopital"};
 
 
-double f(double p) {
-	return a*(p-p0)*(p-p0)+b;
+double f(double p,int n) {
+	return as[n]*(p-p0s[n])*(p-p0s[n])+bs[n];
 }
 
 double clamp(double val,double mi,double ma){
 	return fmin(fmax(val,mi),ma);
 }
 
-void agent_min(vec* pis,double a,double x0,double alpha,vec* y,double xmax,double xmin) {//algo adapté du matlab de RLGL - smiley clin d'oeil
+void agent_min(vec* pis,double a,double x0,double alpha,vec* yis,double xmax,double xmin) {//algo adapté du matlab de RLGL - smiley clin d'oeil
 	double u=0;
 	double z=0;
 	double rho=1;
 	double mu;
 	double xavg;
-	unsigned int N=yis->len;
+	unsigned int N=pis->len;
 	
 	//résolution du problème local de partage par ADMM
 	
@@ -90,9 +86,9 @@ void agent_min(vec* pis,double a,double x0,double alpha,vec* y,double xmax,doubl
 	vec_clamp(pis,xmin,xmax); // on borne p_i = somme(p_ij)
 }
 
-void agent_min_anticip(vec* pis,double a,double x0,double alpha,vec* y,double xmax,double xmin) {
+void agent_min_anticip(vec* pis,double a,double x0,double alpha,vec* y,double xmax,double xmin,vec* pis_anticip,vec *lambda_es) {
 	
-	// calcul d'une valeur moyenne de p_i pour plusieurs valeurs de 
+	// calcul d'une valeur moyenne de p_i pour plusieurs valeurs de lambda
 	
 	vec_zero(pis_anticip);
 	
@@ -122,20 +118,22 @@ void agent_min_anticip(vec* pis,double a,double x0,double alpha,vec* y,double xm
 	vec_clamp(pis,xmin,xmax);// des fois qu'on sorte des bornes...
 }
 
-void travail_noeud(int world_rank,vec *pis, vec *pis_anticip, vec *qis, vec *fis_global, vec *yis, vec *uis, vec *lambda_es) {
+void travail_noeud(int world_rank) {
 	double pmax;
 	double pmin;
 	double p0;
 	double pr;
+	double pi;
+	double fi;
+	double u;
 	int pfxe;
+	vec* pis=NULL;
+	vec* pis_anticip=NULL;
+	vec* qis=NULL;
+	vec* yis=NULL;
+	vec* uis=NULL;
+	vec* lambda_es=NULL;
 	
-	
-	if(world_rank==0) {
-		f_2e_marche=fopen("2e_marche.csv","w");
-		f_simple=fopen("simple.csv","w");
-		f_reserve=fopen("reserve.csv","w");
-		f_prevision=fopen("prevision.csv","w");
-	}
 
     int node;
     int i;
@@ -154,10 +152,12 @@ void travail_noeud(int world_rank,vec *pis, vec *pis_anticip, vec *qis, vec *fis
 	fis_global=vec_new(NNODES);
 	
 	pis=vec_new(NNODES);
+	pis_g[world_rank]=pis;
+	
 	lambda_es=vec_new(n_lambda_e);
 	pis_anticip=vec_new(NNODES);
 	for(unsigned int i_le=0;i_le<n_lambda_e;i_le++) {// génération des valeurs de lambda : randn(moyenne,ecart_type)
-		lambda_es->data[i_le]=clamp(randn(-9.9,5.7),pmin,pmax);
+		lambda_es->data[i_le]=randn(-9.9,5.7);
 	}
 	qis=vec_new(NNODES);
 	yis=vec_new(NNODES);
@@ -178,8 +178,6 @@ void travail_noeud(int world_rank,vec *pis, vec *pis_anticip, vec *qis, vec *fis
 	vec_zero(qis);
 		
 	pi=0;
-	avg=0;
-	u=1.0;
 	
 	if(world_rank==0) {
 		printf("\nPremier marché naïf\n\n");
@@ -191,10 +189,15 @@ void travail_noeud(int world_rank,vec *pis, vec *pis_anticip, vec *qis, vec *fis
 		vec_add(yis,uis);//y=q+u
 		
 		agent_min(pis,a,p0,RHO/2,yis,pmax,pmin);//calcul de p
+	
+		pthread_barrier_wait(&barriere);
 		
 		for(node=0;node<NNODES;node++) {
-			vec_scatter(pis,qis,node,MPI_COMM_WORLD);
-		}//transmission de pt (dans q)
+			qis->data[node]=pis_g[node]->data[world_rank];
+		}
+		
+		pthread_barrier_wait(&barriere);
+
 		
 		vec_sub(qis,pis);
 		vec_mult(qis,-0.5);//q=(p-pt)/2
@@ -211,12 +214,20 @@ void travail_noeud(int world_rank,vec *pis, vec *pis_anticip, vec *qis, vec *fis
 	pi=vec_sum(pis);
 	printf("Valeur de l'élément %d : %f (%f<p<%f)\n",world_rank,pi,pmin,pmax);
 	
-	MPI_Reduce(&pi,&avg,1,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
+	if(world_rank==0){
+		avg=0;
+	}
+	pthread_barrier_wait(&barriere);	
+	pthread_mutex_lock(&mutex);
+	avg+=pi;
+	pthread_mutex_unlock(&mutex);
+	//MPI_Reduce(&pi,&avg,1,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
 	
 	
 	//calcul de f_i(p^*_i) et transmission au process 0, qui ne fera qu'enregister dans un fichier : pas indispensable au fonctionnement
-	fi=f(pi);
-	MPI_Gather(&fi,1,MPI_DOUBLE,fis_global->data,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
+	fi=f(pi,world_rank);
+	fis_global->data[world_rank]=fi;
+	//MPI_Gather(&fi,1,MPI_DOUBLE,fis_global->data,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
 	
 	
 	u=uis->data[0];
@@ -249,8 +260,6 @@ void travail_noeud(int world_rank,vec *pis, vec *pis_anticip, vec *qis, vec *fis
 		
 		pi=0;
 		pfxe=pfxes[world_rank];
-		avg=0;
-		u=1.0;
 		
 		
 		//if(!pfxe) { // est-ce qu'on veut imposer une réserve aux agents qui subissent de toute façon ?
@@ -266,9 +275,13 @@ void travail_noeud(int world_rank,vec *pis, vec *pis_anticip, vec *qis, vec *fis
 			
 			agent_min(pis,a,p0,RHO/2,yis,pmax,pmin);//awiwiwi
 			
+			pthread_barrier_wait(&barriere);
+			
 			for(node=0;node<NNODES;node++) {
-				vec_scatter(pis,qis,node,MPI_COMM_WORLD);
-			}//transmission de pt (dans q)
+				qis->data[node]=pis_g[node]->data[world_rank];
+			}
+			
+			pthread_barrier_wait(&barriere);
 			
 			vec_sub(qis,pis);
 			vec_mult(qis,-0.5);//q=(p-pt)/2
@@ -280,11 +293,20 @@ void travail_noeud(int world_rank,vec *pis, vec *pis_anticip, vec *qis, vec *fis
 		pi=vec_sum(pis);
 		printf("Valeur de l'élément %d : %f (%f<p<%f)\n",world_rank,pi,pmin,pmax);
 		
-		MPI_Reduce(&pi,&avg,1,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
+		if(world_rank==0){
+			avg=0;
+		}
+		pthread_barrier_wait(&barriere);	
+		pthread_mutex_lock(&mutex);
+		avg+=pi;
+		pthread_mutex_unlock(&mutex);
+		//MPI_Reduce(&pi,&avg,1,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
 		
 		
-		fi=f(pi);
-		MPI_Gather(&fi,1,MPI_DOUBLE,fis_global->data,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
+		//calcul de f_i(p^*_i) et transmission au process 0, qui ne fera qu'enregister dans un fichier : pas indispensable au fonctionnement
+		fi=f(pi,world_rank);
+		fis_global->data[world_rank]=fi;
+		//MPI_Gather(&fi,1,MPI_DOUBLE,fis_global->data,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
 		
 		
 		u=uis->data[0];
@@ -311,8 +333,6 @@ void travail_noeud(int world_rank,vec *pis, vec *pis_anticip, vec *qis, vec *fis
 	vec_zero(qis);
 		
 	pi=0;
-	avg=0;
-	u=1.0;
 	
 	if(world_rank==0) {
 		printf("\nPremier marché prévisionnel\n\n");
@@ -323,11 +343,16 @@ void travail_noeud(int world_rank,vec *pis, vec *pis_anticip, vec *qis, vec *fis
 		vec_copyover(yis,qis);
 		vec_add(yis,uis);//y=q+u
 		
-		agent_min_anticip(pis,a,p0,RHO/2,yis,pmax,pmin);//calcul de p
+		agent_min_anticip(pis,a,p0,RHO/2,yis,pmax,pmin,pis_anticip,lambda_es);//calcul de p
+		
+		pthread_barrier_wait(&barriere);
 		
 		for(node=0;node<NNODES;node++) {
-			vec_scatter(pis,qis,node,MPI_COMM_WORLD);
-		}//transmission de pt (dans q)
+			qis->data[node]=pis_g[node]->data[world_rank];
+		}
+		
+		pthread_barrier_wait(&barriere);
+
 		
 		vec_sub(qis,pis);
 		vec_mult(qis,-0.5);//q=(p-pt)/2
@@ -344,12 +369,21 @@ void travail_noeud(int world_rank,vec *pis, vec *pis_anticip, vec *qis, vec *fis
 	pi=vec_sum(pis);
 	printf("Valeur de l'élément %d : %f (%f<p<%f)\n",world_rank,pi,pmin,pmax);
 	
-	MPI_Reduce(&pi,&avg,1,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
+	
+	if(world_rank==0){
+		avg=0;
+	}
+	pthread_barrier_wait(&barriere);	
+	pthread_mutex_lock(&mutex);
+	avg+=pi;
+	pthread_mutex_unlock(&mutex);
+	//MPI_Reduce(&pi,&avg,1,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
 	
 	
 	//calcul de f_i(p^*_i) et transmission au process 0, qui ne fera qu'enregister dans un fichier : pas indispensable au fonctionnement
-	fi=f(pi);
-	MPI_Gather(&fi,1,MPI_DOUBLE,fis_global->data,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
+	fi=f(pi,world_rank);
+	fis_global->data[world_rank]=fi;
+	//MPI_Gather(&fi,1,MPI_DOUBLE,fis_global->data,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
 	
 	
 	u=uis->data[0];
@@ -398,10 +432,19 @@ void travail_noeud(int world_rank,vec *pis, vec *pis_anticip, vec *qis, vec *fis
 				agent_min(pis,a,p0,RHO/2,yis,pmax,pmin);//calcul de p
 				//agent_min(pis,a,p0,RHO/2,yis,pmax,pmin);//calcul de p
 				
+				
+				pthread_barrier_wait(&barriere);
+				
 				for(node=0;node<NNODES;node++) {
+					qis->data[node]=pis_g[node]->data[world_rank];
+				}
+				
+				pthread_barrier_wait(&barriere);
+				
+				/*for(node=0;node<NNODES;node++) {
 					vec_scatter(pis,qis,node,MPI_COMM_WORLD);
 				}//transmission de pt (dans q)
-				
+				*/
 				vec_sub(qis,pis);
 				vec_mult(qis,-0.5);//q=(p-pt)/2
 				
@@ -413,11 +456,20 @@ void travail_noeud(int world_rank,vec *pis, vec *pis_anticip, vec *qis, vec *fis
 			pi=vec_sum(pis);
 			printf("Valeur de l'élément %d : %f (%f<p<%f)\n",world_rank,pi,pmin,pmax);
 			
-			MPI_Reduce(&pi,&avg,1,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
+			if(world_rank==0){
+				avg=0;
+			}
+			pthread_barrier_wait(&barriere);	
+			pthread_mutex_lock(&mutex);
+			avg+=pi;
+			pthread_mutex_unlock(&mutex);
+			//MPI_Reduce(&pi,&avg,1,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
 			
-			//calcul de f_i(p^*_i+p^epsilon_i) et transmission au process 0, qui ne fera qu'enregister dans un fichier : pas indispensable au fonctionnement
-			fi=f(pi);
-			MPI_Gather(&fi,1,MPI_DOUBLE,fis_global->data,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
+			
+			//calcul de f_i(p^*_i) et transmission au process 0, qui ne fera qu'enregister dans un fichier : pas indispensable au fonctionnement
+			fi=f(pi,world_rank);
+			fis_global->data[world_rank]=fi;
+			//MPI_Gather(&fi,1,MPI_DOUBLE,fis_global->data,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
 			
 			if(world_rank==0) {
 				printf("Valeur totale : %f\n",avg);
@@ -434,19 +486,12 @@ void travail_noeud(int world_rank,vec *pis, vec *pis_anticip, vec *qis, vec *fis
 			}
 		}
 	}
-	
-	if(world_rank==0) {
-		fclose(f_2e_marche);
-		fclose(f_reserve);
-		fclose(f_prevision);
-		fclose(f_simple);
-	}
 }
 
 void *thread_noeud(void *arg) {
 	int n=(int)arg;
 	
-	travail_noeud(n,&(pis[n]),&(pis_anticip[n]),&(qis[n]),&(fis_global[n]),&(yis[n]),&(uis[n]),&(lambda_es[n]));
+	travail_noeud(n);
 	
 	pthread_exit(NULL);
 }
@@ -455,12 +500,19 @@ int main(int argc, char** argv) {
 
 	pthread_t *tid;
     int node;
+        
+	f_2e_marche=fopen("2e_marche.csv","w");
+	f_simple=fopen("simple.csv","w");
+	f_reserve=fopen("reserve.csv","w");
+	f_prevision=fopen("prevision.csv","w");
 	
 	pthread_barrier_init(&barriere,NULL,NNODES);
 	
 	srand(time(NULL));
 	
 	tid=calloc(sizeof(pthread_t),NNODES);
+	
+	pis_g=malloc(NNODES*sizeof(pis_g));
 	
 	for(node=0;node<NNODES;node++) {
 		pthread_create(&tid[node],NULL,thread_noeud,(void *)node);
@@ -470,6 +522,10 @@ int main(int argc, char** argv) {
 		pthread_join(tid[node],NULL);
 	}
 	
-    MPI_Finalize();
+	fclose(f_2e_marche);
+	fclose(f_reserve);
+	fclose(f_prevision);
+	fclose(f_simple);
+	
 	return 0;
 }

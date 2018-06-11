@@ -1,5 +1,4 @@
 #include <stdlib.h>
-#include <mpi.h>
 
 typedef struct{
 	unsigned int len;
@@ -94,8 +93,4 @@ void vec_clamp(vec* v,double vmin,double vmax) {
 	if(s<vmin) {
 		vec_mult(v,vmin/s);
 	}
-}
-
-void vec_scatter(vec* source,vec* dest,int root,MPI_Comm com) {
-	MPI_Scatter(source->data,1,MPI_DOUBLE,&(dest->data[root]),1,MPI_DOUBLE,root,com);
 }
