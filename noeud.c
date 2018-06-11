@@ -6,8 +6,8 @@
 #include "vec.h"
 #include "random.h"
 
-#define ITERS 200//itérations "globales" (échanges d'info)
-#define LITERS 30//itérations pour la minimisation locale
+#define ITERS 600//itérations "globales" (échanges d'info)
+#define LITERS 50//itérations pour la minimisation locale
 #define RHO 1.0//rho=1 pour que la variable duale réduite (u) soit égale à la variable duale (le prix)
 
 int NNODES=175;
@@ -232,6 +232,7 @@ void travail_noeud(int world_rank) {
 	
 	u=uis->data[0];
 	
+	pthread_barrier_wait(&barriere);
 	if(world_rank==0) {
 		printf("Valeur totale : %f\n",avg);
 		printf("Variable duale : %f\n",u);
@@ -311,6 +312,7 @@ void travail_noeud(int world_rank) {
 		
 		u=uis->data[0];
 		
+		pthread_barrier_wait(&barriere);
 		if(world_rank==0) {
 			printf("Valeur totale : %f\n",avg);
 			printf("Variable duale : %f\n",u);
@@ -388,6 +390,7 @@ void travail_noeud(int world_rank) {
 	
 	u=uis->data[0];
 	
+	pthread_barrier_wait(&barriere);
 	if(world_rank==0) {
 		printf("Valeur totale : %f\n",avg);
 		printf("Variable duale : %f\n",u);
@@ -471,6 +474,7 @@ void travail_noeud(int world_rank) {
 			fis_global->data[world_rank]=fi;
 			//MPI_Gather(&fi,1,MPI_DOUBLE,fis_global->data,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
 			
+			pthread_barrier_wait(&barriere);
 			if(world_rank==0) {
 				printf("Valeur totale : %f\n",avg);
 				printf("Variable duale : %f\n",uis->data[0]);
