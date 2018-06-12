@@ -8,8 +8,8 @@
 
 // uniquement pour avoir un "passé" du prix, pour faire
 
-#define ITERS 150//itérations "globales" (échanges d'info)
-#define LITERS 20//itérations pour la minimisation locale
+#define ITERS 400//itérations "globales" (échanges d'info)
+#define LITERS 30//itérations pour la minimisation locale
 #define RHO 1.0
 
 int NNODES;

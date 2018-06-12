@@ -22,8 +22,8 @@ pthread_mutex_t mutex=PTHREAD_MUTEX_INITIALIZER;
 //#include "defs_15.h"//le problème originel
 #include "defs_175.h"//le problème de Thomas
 double prs[]={0,1,0.9,1.3,2,2,0,0,0,0,0,0,0,0,-0.2};
-unsigned int n_lambda_e=200;//nombre d'échantillons de prix générés
-int n_situations=200;//nombre de situations par niveau de fiabilité
+unsigned int n_lambda_e=100;//nombre d'échantillons de prix générés
+int n_situations=100;//nombre de situations par niveau de fiabilité
     
 FILE *f_2e_marche;
 FILE *f_simple;
@@ -103,10 +103,10 @@ void agent_min_anticip(vec* pis,double a,double x0,double alpha,vec* y,double xm
 
 void travail_noeud(int world_rank) {
 	double ecart_type=0.1;//valeur d'écart-type : inverse de la fiabilité des agents qui subissent
-	double ecart_type_step=0.1;
+	double ecart_type_step=0.16;
 	double ecart_type_max=1.71;
 	double reserve=0.0;// réserve en proportion de la plage de puissance disponible
-	double reserve_step=0.002;
+	double reserve_step=0.01;
 	double reserve_max=0.3;
 	double r;
 	double a;
