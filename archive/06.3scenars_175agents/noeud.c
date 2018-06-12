@@ -36,8 +36,8 @@ double reserve_step=0.002;
 double reserve_max=0.3;
 double r;
 
-//#include "defs_15.h"//le problème originel
-#include "defs_175.h"//le problème de Thomas
+#include "defs_15.h"//le problème originel
+//#include "defs_175.h"//le problème de Thomas
 double prs[]={0,1,0.9,1.3,2,2,0,0,0,0,0,0,0,0,-0.2};
 double ecart_type=0.1;//valeur d'écart-type : inverse de la fiabilité des agents qui subissent
 double ecart_type_step=0.1;

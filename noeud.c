@@ -6,24 +6,14 @@
 #include "vec.h"
 #include "random.h"
 
-#define ITERS 600//itérations "globales" (échanges d'info)
-#define LITERS 50//itérations pour la minimisation locale
+#define ITERS 400//itérations "globales" (échanges d'info)
+#define LITERS 30//itérations pour la minimisation locale
 #define RHO 1.0//rho=1 pour que la variable duale réduite (u) soit égale à la variable duale (le prix)
 
 int NNODES=175;
-double u;
-double a;
-double b;
-double p0;
-double pmax;
-double pmin;
-double pr;
-double fi;
-int pfxe;
 vec* fis_global=NULL;
 double pi=0.0;
 double avg;
-double lamb;
 vec** pis_g=NULL;
 
 pthread_barrier_t barriere;
@@ -119,6 +109,8 @@ void travail_noeud(int world_rank) {
 	double reserve_step=0.002;
 	double reserve_max=0.3;
 	double r;
+	double a;
+	double b;
 	double pmax;
 	double pmin;
 	double p0;
@@ -292,7 +284,7 @@ void travail_noeud(int world_rank) {
 		}
 		
 		pi=vec_sum(pis);
-		printf("Valeur de l'élément %d : %f (%f<p<%f)\n",world_rank,pi,pmin,pmax);
+		//printf("Valeur de l'élément %d : %f (%f<p<%f)\n",world_rank,pi,pmin,pmax);
 		
 		if(world_rank==0){
 			avg=0;
@@ -457,7 +449,7 @@ void travail_noeud(int world_rank) {
 			
 			//pi=vec_sum(pis)+pi;
 			pi=vec_sum(pis);
-			printf("Valeur de l'élément %d : %f (%f<p<%f)\n",world_rank,pi,pmin,pmax);
+			//printf("Valeur de l'élément %d : %f (%f<p<%f)\n",world_rank,pi,pmin,pmax);
 			
 			if(world_rank==0){
 				avg=0;
