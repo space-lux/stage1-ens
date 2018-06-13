@@ -12,8 +12,8 @@
 
 int NNODES=175;
 vec* fis_global=NULL;
-double pi=0.0;
-double avg;
+float pi=0.0;
+float avg;
 vec** pis_g=NULL;
 
 pthread_barrier_t barriere;
@@ -21,7 +21,7 @@ pthread_mutex_t mutex=PTHREAD_MUTEX_INITIALIZER;
 
 //#include "defs_15.h"//le problème originel
 #include "defs_175.h"//le problème de Thomas
-double prs[]={0,1,0.9,1.3,2,2,0,0,0,0,0,0,0,0,-0.2};
+float prs[]={0,1,0.9,1.3,2,2,0,0,0,0,0,0,0,0,-0.2};
 unsigned int n_lambda_e=100;//nombre d'échantillons de prix générés
 int n_situations=100;//nombre de situations par niveau de fiabilité
     
@@ -34,20 +34,20 @@ FILE *f_prevision;
 //char* names[]={"charbon","eolienne","eolienne","eolienne","eolienne","eolienne","barrage","panneau","panneau","datacenter","logement","usine","tram 1","tram 2","hopital"};
 
 
-double f(double p,int n) {
+float f(float p,int n) {
 	return as[n]*(p-p0s[n])*(p-p0s[n])+bs[n];
 }
 
-double clamp(double val,double mi,double ma){
+float clamp(float val,float mi,float ma){
 	return fmin(fmax(val,mi),ma);
 }
 
-void agent_min(vec* pis,double a,double x0,double alpha,vec* yis,double xmax,double xmin) {//algo adapté du matlab de RLGL - smiley clin d'oeil
-	double u=0;
-	double z=0;
-	double rho=1;
-	double mu;
-	double xavg;
+void agent_min(vec* pis,float a,float x0,float alpha,vec* yis,float xmax,float xmin) {//algo adapté du matlab de RLGL - smiley clin d'oeil
+	float u=0;
+	float z=0;
+	float rho=1;
+	float mu;
+	float xavg;
 	unsigned int N=pis->len;
 	
 	//résolution du problème local de partage par ADMM
@@ -61,28 +61,28 @@ void agent_min(vec* pis,double a,double x0,double alpha,vec* yis,double xmax,dou
 		xavg=vec_avg(pis);
 		mu=u+xavg;
 		
-		z=clamp((2*a*x0+ mu*rho)/(2*a*((double)N)+rho),xmin,xmax);
+		z=clamp((2*a*x0+ mu*rho)/(2*a*((float)N)+rho),xmin,xmax);
 		u=u+xavg-z;
 	}
 	
 	vec_clamp(pis,xmin,xmax); // on borne p_i = somme(p_ij)
 }
 
-void agent_min_anticip(vec* pis,double a,double x0,double alpha,vec* y,double xmax,double xmin,vec* pis_anticip,vec *lambda_es) {
+void agent_min_anticip(vec* pis,float a,float x0,float alpha,vec* y,float xmax,float xmin,vec* pis_anticip,vec *lambda_es) {
 	
-	double lambda_e;
+	float lambda_e;
 	// calcul d'une valeur moyenne de p_i pour plusieurs valeurs de lambda
 	
 	vec_zero(pis_anticip);
 	
-	double pmin;
-	double pmax;
+	float pmin;
+	float pmax;
 	
 	for(unsigned int i_le=0;i_le<n_lambda_e;i_le++) {//pour chaque valeur de lambda
 		lambda_e=lambda_es->data[i_le];
 		agent_min(pis,a,x0-lambda_e/(2*a),alpha,y,xmax,xmin); // on peut montrer que pour notre problème, la fonction de coût anticipée correspond au polynôme centré non pas en x0 mais en x0-(lambda/2a)
-		double pi=vec_sum(pis);
-		double pe=x0-pi+lambda_e/(2*a);//p^epsilon
+		float pi=vec_sum(pis);
+		float pe=x0-pi+lambda_e/(2*a);//p^epsilon
 		pmin=xmin;
 		pmax=xmax;
 		if((pi+pe)>xmax) {//La projection orthogonale ayant l'air d'être source d'opérations interdites, on se contente de borner bêtement pi+pe
@@ -97,27 +97,27 @@ void agent_min_anticip(vec* pis,double a,double x0,double alpha,vec* y,double xm
 		vec_add(pis_anticip,pis);
 	}
 	vec_copyover(pis,pis_anticip);
-	vec_mult(pis,((double)1)/((double)n_lambda_e));// on divise la somme par le nombre d'éléments -> moyenne
+	vec_mult(pis,((float)1)/((float)n_lambda_e));// on divise la somme par le nombre d'éléments -> moyenne
 	vec_clamp(pis,xmin,xmax);// des fois qu'on sorte des bornes...
 }
 
 void travail_noeud(int world_rank) {
-	double ecart_type=0.1;//valeur d'écart-type : inverse de la fiabilité des agents qui subissent
-	double ecart_type_step=0.16;
-	double ecart_type_max=1.71;
-	double reserve=0.0;// réserve en proportion de la plage de puissance disponible
-	double reserve_step=0.01;
-	double reserve_max=0.3;
-	double r;
-	double a;
-	double b;
-	double pmax;
-	double pmin;
-	double p0;
-	double pr;
-	double pi;
-	double fi;
-	double u;
+	float ecart_type=0.1;//valeur d'écart-type : inverse de la fiabilité des agents qui subissent
+	float ecart_type_step=0.16;
+	float ecart_type_max=1.71;
+	float reserve=0.0;// réserve en proportion de la plage de puissance disponible
+	float reserve_step=0.01;
+	float reserve_max=0.3;
+	float r;
+	float a;
+	float b;
+	float pmax;
+	float pmin;
+	float p0;
+	float pr;
+	float pi;
+	float fi;
+	float u;
 	int pfxe;
 	vec* pis=NULL;
 	vec* pis_anticip=NULL;
@@ -213,13 +213,13 @@ void travail_noeud(int world_rank) {
 	pthread_mutex_lock(&mutex);
 	avg+=pi;
 	pthread_mutex_unlock(&mutex);
-	//MPI_Reduce(&pi,&avg,1,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
+	//MPI_Reduce(&pi,&avg,1,MPI_float,MPI_SUM,0,MPI_COMM_WORLD);
 	
 	
 	//calcul de f_i(p^*_i) et transmission au process 0, qui ne fera qu'enregister dans un fichier : pas indispensable au fonctionnement
 	fi=f(pi,world_rank);
 	fis_global->data[world_rank]=fi;
-	//MPI_Gather(&fi,1,MPI_DOUBLE,fis_global->data,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
+	//MPI_Gather(&fi,1,MPI_float,fis_global->data,1,MPI_float,0,MPI_COMM_WORLD);
 	
 	
 	u=uis->data[0];
@@ -293,13 +293,13 @@ void travail_noeud(int world_rank) {
 		pthread_mutex_lock(&mutex);
 		avg+=pi;
 		pthread_mutex_unlock(&mutex);
-		//MPI_Reduce(&pi,&avg,1,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
+		//MPI_Reduce(&pi,&avg,1,MPI_float,MPI_SUM,0,MPI_COMM_WORLD);
 		
 		
 		//calcul de f_i(p^*_i) et transmission au process 0, qui ne fera qu'enregister dans un fichier : pas indispensable au fonctionnement
 		fi=f(pi,world_rank);
 		fis_global->data[world_rank]=fi;
-		//MPI_Gather(&fi,1,MPI_DOUBLE,fis_global->data,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
+		//MPI_Gather(&fi,1,MPI_float,fis_global->data,1,MPI_float,0,MPI_COMM_WORLD);
 		
 		
 		u=uis->data[0];
@@ -371,13 +371,13 @@ void travail_noeud(int world_rank) {
 	pthread_mutex_lock(&mutex);
 	avg+=pi;
 	pthread_mutex_unlock(&mutex);
-	//MPI_Reduce(&pi,&avg,1,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
+	//MPI_Reduce(&pi,&avg,1,MPI_float,MPI_SUM,0,MPI_COMM_WORLD);
 	
 	
 	//calcul de f_i(p^*_i) et transmission au process 0, qui ne fera qu'enregister dans un fichier : pas indispensable au fonctionnement
 	fi=f(pi,world_rank);
 	fis_global->data[world_rank]=fi;
-	//MPI_Gather(&fi,1,MPI_DOUBLE,fis_global->data,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
+	//MPI_Gather(&fi,1,MPI_float,fis_global->data,1,MPI_float,0,MPI_COMM_WORLD);
 	
 	
 	u=uis->data[0];
@@ -458,13 +458,13 @@ void travail_noeud(int world_rank) {
 			pthread_mutex_lock(&mutex);
 			avg+=pi;
 			pthread_mutex_unlock(&mutex);
-			//MPI_Reduce(&pi,&avg,1,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
+			//MPI_Reduce(&pi,&avg,1,MPI_float,MPI_SUM,0,MPI_COMM_WORLD);
 			
 			
 			//calcul de f_i(p^*_i) et transmission au process 0, qui ne fera qu'enregister dans un fichier : pas indispensable au fonctionnement
 			fi=f(pi,world_rank);
 			fis_global->data[world_rank]=fi;
-			//MPI_Gather(&fi,1,MPI_DOUBLE,fis_global->data,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
+			//MPI_Gather(&fi,1,MPI_float,fis_global->data,1,MPI_float,0,MPI_COMM_WORLD);
 			
 			pthread_barrier_wait(&barriere);
 			if(world_rank==0) {

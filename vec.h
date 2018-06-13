@@ -2,7 +2,7 @@
 
 typedef struct{
 	unsigned int len;
-	double * data;
+	float * data;
 } vec;
 
 
@@ -14,14 +14,14 @@ void vec_zero(vec* v) {
 
 vec* vec_new(unsigned int len) {
 	vec* v=malloc(sizeof(vec));
-	v->data=malloc(len*sizeof(double));
+	v->data=malloc(len*sizeof(float));
 	v->len=len;
 	return v;
 }
 
-vec* vec_new_fromtab(double* tab,unsigned int len) {
+vec* vec_new_fromtab(float* tab,unsigned int len) {
 	vec* v=malloc(sizeof(vec));
-	v->data=malloc(len*sizeof(double));
+	v->data=malloc(len*sizeof(float));
 	v->len=len;
 	for(int i=0;i<v->len;i++) {
 		v->data[i]=tab[i];
@@ -29,8 +29,8 @@ vec* vec_new_fromtab(double* tab,unsigned int len) {
 	return v;
 }
 
-double vec_sum(vec* v) {
-	double r=0;
+float vec_sum(vec* v) {
+	float r=0;
 	
 	for(int i=0;i<v->len;i++) {
 		r+=v->data[i];
@@ -38,8 +38,8 @@ double vec_sum(vec* v) {
 	return r;
 }
 
-double vec_avg(vec* v) {
-	return vec_sum(v)/((double)v->len);
+float vec_avg(vec* v) {
+	return vec_sum(v)/((float)v->len);
 }
 
 vec* vec_copy(vec* v) {
@@ -59,14 +59,14 @@ void vec_free(vec* v) {
 
 void vec_copyover(vec* dest, vec* src) {
 	dest->len=src->len;
-	dest->data=realloc(dest->data,src->len*sizeof(double));
+	dest->data=realloc(dest->data,src->len*sizeof(float));
 	
 	for(int i=0;i<src->len;i++) {
 		dest->data[i]=src->data[i];
 	}
 }
 
-void vec_mult(vec* v,double a) {
+void vec_mult(vec* v,float a) {
 	for(int i=0;i<v->len;i++) {
 		v->data[i]*=a;
 	}
@@ -84,8 +84,8 @@ void vec_sub(vec* a, vec* b) {
 	}
 }
 
-void vec_clamp(vec* v,double vmin,double vmax) {
-	double s=vec_sum(v);
+void vec_clamp(vec* v,float vmin,float vmax) {
+	float s=vec_sum(v);
 	
 	if(s>vmax) {
 		vec_mult(v,vmax/s);
