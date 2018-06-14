@@ -15,7 +15,6 @@ vec* fis_global=NULL;
 float pi=0.0;
 float avg;
 vec** pis_g=NULL;
-vec* pi_g=NULL;
 
 pthread_barrier_t barriere;
 pthread_mutex_t mutex=PTHREAD_MUTEX_INITIALIZER;
@@ -30,11 +29,6 @@ FILE *f_2e_marche;
 FILE *f_simple;
 FILE *f_reserve;
 FILE *f_prevision;
-    
-FILE *f_2e_marche_p;
-FILE *f_simple_p;
-FILE *f_reserve_p;
-FILE *f_prevision_p;
 
 //pour s'y retrouver à la lecture des résultats :
 //char* names[]={"charbon","eolienne","eolienne","eolienne","eolienne","eolienne","barrage","panneau","panneau","datacenter","logement","usine","tram 1","tram 2","hopital"};
@@ -212,14 +206,13 @@ void travail_noeud(int world_rank) {
 	pi=vec_sum(pis);
 	printf("Valeur de l'élément %d : %f (%f<p<%f)\n",world_rank,pi,pmin,pmax);
 	
-	/*if(world_rank==0){
+	if(world_rank==0){
 		avg=0;
 	}
 	pthread_barrier_wait(&barriere);	
 	pthread_mutex_lock(&mutex);
 	avg+=pi;
-	pthread_mutex_unlock(&mutex);*/
-	pi_g->data[world_rank]=pi;
+	pthread_mutex_unlock(&mutex);
 	//MPI_Reduce(&pi,&avg,1,MPI_float,MPI_SUM,0,MPI_COMM_WORLD);
 	
 	
@@ -233,12 +226,6 @@ void travail_noeud(int world_rank) {
 	
 	pthread_barrier_wait(&barriere);
 	if(world_rank==0) {
-		avg=vec_sum(pi_g);
-		for(int j=0;j<(NNODES-1);j++) {
-			fprintf(f_simple_p,"%f;",pi_g->data[j]);
-		}
-		fprintf(f_simple_p,"%f\n",pi_g->data[NNODES-1]);
-		
 		printf("Valeur totale : %f\n",avg);
 		printf("Variable duale : %f\n",u);
 		//enregistrement : tous les f_i(p^*_i) et u*
@@ -299,14 +286,13 @@ void travail_noeud(int world_rank) {
 		pi=vec_sum(pis);
 		//printf("Valeur de l'élément %d : %f (%f<p<%f)\n",world_rank,pi,pmin,pmax);
 		
-		/*if(world_rank==0){
+		if(world_rank==0){
 			avg=0;
-		}*/
-		//pthread_barrier_wait(&barriere);	
-		/*pthread_mutex_lock(&mutex);
+		}
+		pthread_barrier_wait(&barriere);	
+		pthread_mutex_lock(&mutex);
 		avg+=pi;
-		pthread_mutex_unlock(&mutex);*/
-		pi_g->data[world_rank]=pi;
+		pthread_mutex_unlock(&mutex);
 		//MPI_Reduce(&pi,&avg,1,MPI_float,MPI_SUM,0,MPI_COMM_WORLD);
 		
 		
@@ -320,12 +306,6 @@ void travail_noeud(int world_rank) {
 		
 		pthread_barrier_wait(&barriere);
 		if(world_rank==0) {
-			avg=vec_sum(pi_g);
-			for(int j=0;j<(NNODES-1);j++) {
-				fprintf(f_reserve_p,"%f;",pi_g->data[j]);
-			}
-			fprintf(f_reserve_p,"%f\n",pi_g->data[NNODES-1]);
-		
 			printf("Valeur totale : %f\n",avg);
 			printf("Variable duale : %f\n",u);
 			
@@ -384,14 +364,13 @@ void travail_noeud(int world_rank) {
 	printf("Valeur de l'élément %d : %f (%f<p<%f)\n",world_rank,pi,pmin,pmax);
 	
 	
-	/*if(world_rank==0){
+	if(world_rank==0){
 		avg=0;
-	}*/
-	//pthread_barrier_wait(&barriere);	
-	/*pthread_mutex_lock(&mutex);
+	}
+	pthread_barrier_wait(&barriere);	
+	pthread_mutex_lock(&mutex);
 	avg+=pi;
-	pthread_mutex_unlock(&mutex);*/
-	pi_g->data[world_rank]=pi;
+	pthread_mutex_unlock(&mutex);
 	//MPI_Reduce(&pi,&avg,1,MPI_float,MPI_SUM,0,MPI_COMM_WORLD);
 	
 	
@@ -405,12 +384,6 @@ void travail_noeud(int world_rank) {
 	
 	pthread_barrier_wait(&barriere);
 	if(world_rank==0) {
-		avg=vec_sum(pi_g);
-		for(int j=0;j<(NNODES-1);j++) {
-			fprintf(f_prevision_p,"%f;",pi_g->data[j]);
-		}
-		fprintf(f_prevision_p,"%f\n",pi_g->data[NNODES-1]);
-		
 		printf("Valeur totale : %f\n",avg);
 		printf("Variable duale : %f\n",u);
 		//enregistrement : tous les f_i(p^*_i) et u*
@@ -478,14 +451,13 @@ void travail_noeud(int world_rank) {
 			pi=vec_sum(pis);
 			//printf("Valeur de l'élément %d : %f (%f<p<%f)\n",world_rank,pi,pmin,pmax);
 			
-			/*if(world_rank==0){
+			if(world_rank==0){
 				avg=0;
 			}
-			pthread_barrier_wait(&barriere);	*/
-			/*pthread_mutex_lock(&mutex);
+			pthread_barrier_wait(&barriere);	
+			pthread_mutex_lock(&mutex);
 			avg+=pi;
-			pthread_mutex_unlock(&mutex);*/
-			pi_g->data[world_rank]=pi;
+			pthread_mutex_unlock(&mutex);
 			//MPI_Reduce(&pi,&avg,1,MPI_float,MPI_SUM,0,MPI_COMM_WORLD);
 			
 			
@@ -496,12 +468,6 @@ void travail_noeud(int world_rank) {
 			
 			pthread_barrier_wait(&barriere);
 			if(world_rank==0) {
-				avg=vec_sum(pi_g);
-				for(int j=0;j<(NNODES-1);j++) {
-					fprintf(f_2e_marche_p,"%f;",pi_g->data[j]);
-				}
-				fprintf(f_2e_marche_p,"%f\n",pi_g->data[NNODES-1]);
-		
 				printf("Valeur totale : %f\n",avg);
 				printf("Variable duale : %f\n",uis->data[0]);
 				
@@ -535,11 +501,6 @@ int main(int argc, char** argv) {
 	f_simple=fopen("simple.csv","w");
 	f_reserve=fopen("reserve.csv","w");
 	f_prevision=fopen("prevision.csv","w");
-        
-	f_2e_marche_p=fopen("2e_marche_p.csv","w");
-	f_simple_p=fopen("simple_p.csv","w");
-	f_reserve_p=fopen("reserve_p.csv","w");
-	f_prevision_p=fopen("prevision_p.csv","w");
 	
 	pthread_barrier_init(&barriere,NULL,NNODES);
 	
@@ -549,8 +510,6 @@ int main(int argc, char** argv) {
 	
 	pis_g=malloc(NNODES*sizeof(pis_g));
 	
-	pi_g=vec_new(NNODES);
-	
 	for(node=0;node<NNODES;node++) {
 		pthread_create(&tid[node],NULL,thread_noeud,(void *)node);
 	}
@@ -558,11 +517,6 @@ int main(int argc, char** argv) {
 	for(node=0;node<NNODES;node++) {
 		pthread_join(tid[node],NULL);
 	}
-	
-	fclose(f_2e_marche_p);
-	fclose(f_reserve_p);
-	fclose(f_prevision_p);
-	fclose(f_simple_p);
 	
 	fclose(f_2e_marche);
 	fclose(f_reserve);
